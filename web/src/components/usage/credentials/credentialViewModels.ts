@@ -247,7 +247,7 @@ function toDisplayQuota(row: UsageQuotaRow): DisplayQuota | undefined {
   const used = finiteNumber(row.used)
   const limit = finiteNumber(row.limit)
   const remaining = finiteNumber(row.remaining)
-  const percentDisplay = quotaPercent(row, used, limit)
+  const percentDisplay = quotaPercent(row, used, limit, remaining)
 
   const windowSeconds = finiteNumber(row.window?.seconds)
   const label = quotaLabel(row, windowSeconds)
@@ -423,7 +423,7 @@ function quotaWindowRolePrefix(row: UsageQuotaRow): string {
   return firstNonEmpty(row.metric, keyName) ?? ''
 }
 
-function quotaPercent(row: UsageQuotaRow, used?: number, limit?: number): { percent: number | null; kind: DisplayQuota['percentKind'] } {
+function quotaPercent(row: UsageQuotaRow, used?: number, limit?: number, remaining?: number): { percent: number | null; kind: DisplayQuota['percentKind'] } {
   // 优先使用 provider 已给出的百分比；没有时才用 used/limit 推导。
   const usedPercent = finiteNumber(row.usedPercent)
   if (usedPercent !== undefined) {
@@ -432,6 +432,10 @@ function quotaPercent(row: UsageQuotaRow, used?: number, limit?: number): { perc
   const remainingFraction = finiteNumber(row.remainingFraction)
   if (remainingFraction !== undefined) {
     return { percent: clampPercent(remainingFraction * 100), kind: 'remaining' }
+  }
+  // Poe 月度授予行只给 Remaining + Limit（无 Used），剩余比例直接驱动水位条。
+  if (remaining !== undefined && limit !== undefined && limit > 0) {
+    return { percent: clampPercent((remaining / limit) * 100), kind: 'remaining' }
   }
   if (used !== undefined && limit !== undefined && limit > 0) {
     return { percent: clampPercent((used / limit) * 100), kind: 'used' }
