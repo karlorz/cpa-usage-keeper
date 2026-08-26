@@ -6,7 +6,7 @@ import { ProviderBrandIcon } from '@/components/ProviderBrandIcon'
 import { RequestEventLogModal } from '@/components/usage/RequestEventLogModal'
 import { ApiError, fetchErrorEvents, fetchUsageEvents } from '@/lib/api'
 import type { ErrorEvent, UsageEvent, UsageEventRequestLogResponse } from '@/lib/types'
-import { AuthFileQuotaPanel } from './AuthFileCredentialsSection'
+import { AuthFileQuotaPanel, PoePoeQuotaPanel } from './AuthFileCredentialsSection'
 import { CredentialErrorEventsList } from './CredentialErrorEventsList'
 import { CredentialHealthPanel } from './CredentialHealthPanel'
 import { CredentialPriorityBadge, cacheReadRateTone, credentialToneClassName, formatCredentialNumber, formatCredentialPercent, successRateTone } from './CredentialSectionShell'
@@ -524,7 +524,12 @@ export function CredentialDetailDrawer({
                 <h3>{t('usage_stats.credentials_detail_quota')}</h3>
                 <AuthFileQuotaPanel row={selection.row} quotaUsageMode="current" />
               </section>
-            ) : null}
+            ) : (
+              <section className={styles.overviewSection}>
+                <h3>{t('usage_stats.credentials_detail_quota')}</h3>
+                <PoePoeQuotaPanel row={selection.row} />
+              </section>
+            )}
           </div>
           <section className={`${styles.overviewSection} ${styles.healthSection}`.trim()}>
             <h3>{t('usage_stats.credentials_detail_health')}</h3>

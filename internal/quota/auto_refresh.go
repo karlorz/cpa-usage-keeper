@@ -445,10 +445,12 @@ func delayUntil(now time.Time, dueAt time.Time) time.Duration {
 
 func (s *Service) listAutoRefreshAuthFiles(ctx context.Context) ([]entities.UsageIdentity, error) {
 	var identities []entities.UsageIdentity
-	// 自动刷新只扫描未删除且未禁用的 Auth Files；AI Provider 和用户停用的 Auth File 都不应产生后台请求。
+	// 自动刷新扫描未删除且未禁用的 Auth Files；Poe API-key AI Provider 是唯一额外放行的身份来源。
 	err := s.db.WithContext(ctx).
 		Select("id, name, alias, identity, provider, type, file_name, auth_type, is_deleted, disabled").
-		Where("auth_type = ? AND is_deleted = ? AND (disabled IS NULL OR disabled = ?)", entities.UsageIdentityAuthTypeAuthFile, false, false).
+		Where("(auth_type = ? AND is_deleted = ? AND (disabled IS NULL OR disabled = ?)) OR (auth_type = ? AND is_deleted = ? AND (disabled IS NULL OR disabled = ?) AND provider = ?)",
+			entities.UsageIdentityAuthTypeAuthFile, false, false,
+			entities.UsageIdentityAuthTypeAIProvider, false, false, "poe").
 		Order("priority IS NULL ASC").
 		Order("priority DESC").
 		Order("id ASC").

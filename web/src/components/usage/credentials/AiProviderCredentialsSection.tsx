@@ -5,6 +5,9 @@ import type { UsageIdentityPageSort } from '@/lib/api'
 import { CredentialAliasEditor, isCredentialAliasEditorDisabled } from './CredentialAliasEditor'
 import { CredentialHealthPanel } from './CredentialHealthPanel'
 import { CredentialPriorityBadge, CredentialRowShell, CredentialSectionShell, CredentialTableHeader, CredentialsPagination, MetricPill, RequestMetric, TonePercent, cacheReadRateTone, formatCredentialNumber, successRateTone } from './CredentialSectionShell'
+import { PoePoeQuotaPanel } from './AuthFileCredentialsSection'
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { IconRefreshCw } from '@/components/ui/icons'
 import { ProviderBrandIcon } from '@/components/ProviderBrandIcon'
 import { QuestionMarkHelp } from '@/components/ui/QuestionMarkHelp'
 
@@ -24,11 +27,13 @@ interface AiProviderCredentialsSectionProps {
   onPageSizeChange: (pageSize: number) => void
   onActiveOnlyChange: (activeOnly: boolean) => void
   onSortChange: (sort: UsageIdentityPageSort) => void
+  onRefreshQuotaForAuthIndex?: (authIndex: string) => Promise<void>
 }
 
-export function AiProviderCredentialsSection({ rows, total, page, totalPages, pageSize, activeOnly, sort, loading, aliasSavingId, onSaveAlias, onOpenDetails, onPageChange, onPageSizeChange, onActiveOnlyChange, onSortChange }: AiProviderCredentialsSectionProps) {
+export function AiProviderCredentialsSection({ rows, total, page, totalPages, pageSize, activeOnly, sort, loading, aliasSavingId, onSaveAlias, onOpenDetails, onPageChange, onPageSizeChange, onActiveOnlyChange, onSortChange, onRefreshQuotaForAuthIndex }: AiProviderCredentialsSectionProps) {
   const { t } = useTranslation()
   const helpText = t('usage_stats.credentials_ai_providers_active_only_help')
+  const rowRefreshing = (row: AiProviderCredentialRow) => row.refreshStatus === 'queued' || row.refreshStatus === 'running' || row.quotaLoading
 
   return (
     <CredentialSectionShell
@@ -112,7 +117,25 @@ export function AiProviderCredentialsSection({ rows, total, page, totalPages, pa
               <MetricPill value={<TonePercent value={row.cacheReadRate} tone={cacheReadRateTone(row.cacheReadRate)} />} />
             </>
           )}
-          side={<CredentialHealthPanel displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.lastUsedText} statsUpdatedAt={row.statsUpdatedText} />}
+          side={row.hasPoeQuota ? (
+            <div className={styles.credentialQuotaSideWithAction}>
+              <PoePoeQuotaPanel row={row} />
+              <div className={styles.credentialQuotaActionStack}>
+                <button
+                  type="button"
+                  className={`${styles.credentialRowRefreshButton} ${rowRefreshing(row) ? styles.credentialRowRefreshButtonLoading : ''}`.trim()}
+                  onClick={() => onRefreshQuotaForAuthIndex ? void onRefreshQuotaForAuthIndex(row.identity.identity) : undefined}
+                  disabled={row.identity.is_deleted || rowRefreshing(row) || !onRefreshQuotaForAuthIndex}
+                  aria-label={t('usage_stats.credentials_refresh_single', { name: row.displayName })}
+                  aria-busy={rowRefreshing(row)}
+                >
+                  {rowRefreshing(row) ? <LoadingSpinner size={13} /> : <IconRefreshCw size={13} />}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <CredentialHealthPanel displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.lastUsedText} statsUpdatedAt={row.statsUpdatedText} />
+          )}
           rowClassName={styles.aiProviderCredentialRow}
         />
       ))}

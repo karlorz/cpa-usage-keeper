@@ -457,6 +457,55 @@ func parseKimiLimitWindow(object map[string]json.RawMessage) *KimiLimitWindow {
 	}
 }
 
+func parsePoeUsagePayload(response *apicall.Response) (*PoeUsagePayload, error) {
+	object, err := parseResponseObject(response)
+	if err != nil {
+		return nil, err
+	}
+	// Poe 可能返回同名字段下的嵌套对象，取 body 后继续读取，保持与其它 provider 一致的宽容路径。
+	if nested := objectField(object, "body"); nested != nil {
+		object = nested
+	}
+	payload := &PoeUsagePayload{
+		CurrentPointBalance:    poeFloatPtrField(object, "current_point_balance", "currentPointBalance"),
+		PlanPointsBalance:      poeFloatPtrField(object, "plan_points_balance", "planPointsBalance"),
+		AddonPointBalance:      poeFloatPtrField(object, "addon_point_balance", "addonPointBalance"),
+		PlanBalanceUSD:         poeFloatPtrField(object, "plan_balance_usd", "planBalanceUsd"),
+		AddonBalanceUSD:        poeFloatPtrField(object, "addon_balance_usd", "addonBalanceUsd"),
+		TotalBalanceUSD:        poeFloatPtrField(object, "total_balance_usd", "totalBalanceUsd"),
+		PointsCycleStartTime:   poeInt64PtrField(object, "points_cycle_start_time", "pointsCycleStartTime"),
+		NextDailyGrantTime:     poeInt64PtrField(object, "next_daily_grant_time", "nextDailyGrantTime"),
+		NextMonthlyGrantTime:   poeInt64PtrField(object, "next_monthly_grant_time", "nextMonthlyGrantTime"),
+		NextDailyGrantAmount:   poeFloatPtrField(object, "next_daily_grant_amount", "nextDailyGrantAmount"),
+		NextMonthlyGrantAmount: poeFloatPtrField(object, "next_monthly_grant_amount", "nextMonthlyGrantAmount"),
+		AutoRecharge:           boolPtrField(object, "auto_recharge", "autoRecharge"),
+	}
+	if payload.CurrentPointBalance == nil && payload.PlanPointsBalance == nil && payload.NextDailyGrantTime == nil {
+		return nil, fmt.Errorf("empty poe usage response")
+	}
+	return payload, nil
+}
+
+func poeFloatPtrField(object map[string]json.RawMessage, keys ...string) *float64 {
+	value, ok := floatValue(object, keys...)
+	if !ok {
+		return nil
+	}
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil
+	}
+	return &value
+}
+
+func poeInt64PtrField(object map[string]json.RawMessage, keys ...string) *int64 {
+	value, ok := floatValue(object, keys...)
+	if !ok {
+		return nil
+	}
+	parsed := int64(value)
+	return &parsed
+}
+
 func parseCodexResetCreditResponse(response *apicall.Response) (ProviderResetOutput, error) {
 	object, err := parseResponseObject(response)
 	if err != nil {

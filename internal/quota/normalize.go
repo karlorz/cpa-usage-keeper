@@ -63,6 +63,13 @@ func NormalizeQuotaRows(output ProviderOutput) []QuotaRow {
 			return nil
 		}
 		return normalizeXAIQuotaRows(*result)
+	case PoeResult:
+		return normalizePoeQuotaRows(result)
+	case *PoeResult:
+		if result == nil {
+			return nil
+		}
+		return normalizePoeQuotaRows(*result)
 	default:
 		return nil
 	}
@@ -669,6 +676,78 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func normalizePoeQuotaRows(result PoeResult) []QuotaRow {
+	// Poe 只有 compute-points 余额与授予计划，没有水位条；全部以 number-forward 行输出。
+	if result.Usage == nil {
+		return nil
+	}
+	usage := result.Usage
+	rows := make([]QuotaRow, 0, 5)
+	if usage.CurrentPointBalance != nil {
+		rows = append(rows, QuotaRow{
+			Key:       "current_point_balance",
+			Label:     "Compute Points",
+			Scope:     "billing",
+			Metric:    "points",
+			Remaining: usage.CurrentPointBalance,
+		})
+	}
+	if usage.PlanPointsBalance != nil {
+		rows = append(rows, QuotaRow{
+			Key:       "plan_points_balance",
+			Label:     "Plan Points",
+			Scope:     "billing",
+			Metric:    "points",
+			Remaining: usage.PlanPointsBalance,
+		})
+	}
+	if usage.AddonPointBalance != nil && *usage.AddonPointBalance > 0 {
+		rows = append(rows, QuotaRow{
+			Key:       "addon_point_balance",
+			Label:     "Add-on Points",
+			Scope:     "billing",
+			Metric:    "points",
+			Remaining: usage.AddonPointBalance,
+		})
+	}
+	if usage.TotalBalanceUSD != nil {
+		rows = append(rows, QuotaRow{
+			Key:    "total_balance_usd",
+			Label:  "USD Equivalent",
+			Scope:  "billing",
+			Metric: "usd_cents",
+			Used:   poeUSDToCents(usage.TotalBalanceUSD),
+		})
+	}
+	if usage.NextDailyGrantTime != nil && *usage.NextDailyGrantTime > 0 {
+		row := QuotaRow{
+			Key:   "next_daily_grant",
+			Label: "Next Daily Grant",
+			Scope: "billing",
+		}
+		if usage.NextDailyGrantAmount != nil {
+			row.Metric = "points"
+			row.Remaining = usage.NextDailyGrantAmount
+		}
+		row.ResetAt = timeutil.FormatStorageTime(poeUnixMicrosToTime(*usage.NextDailyGrantTime))
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func poeUSDToCents(value *float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	cents := *value * 100
+	return &cents
+}
+
+// poeUnixMicrosToTime 把 Poe Usage API 的微秒时间戳转成项目存储时间。
+func poeUnixMicrosToTime(micros int64) time.Time {
+	return time.Unix(0, micros*1000)
 }
 
 func floatPtr(value float64) *float64 {

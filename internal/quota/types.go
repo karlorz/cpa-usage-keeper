@@ -336,6 +336,25 @@ type XAIResult struct {
 	Monthly *XAIBillingPayload `json:"monthly,omitempty"`
 }
 
+type PoeUsagePayload struct {
+	CurrentPointBalance    *float64 `json:"current_point_balance,omitempty"`
+	PlanPointsBalance      *float64 `json:"plan_points_balance,omitempty"`
+	AddonPointBalance      *float64 `json:"addon_point_balance,omitempty"`
+	PlanBalanceUSD         *float64 `json:"plan_balance_usd,omitempty"`
+	AddonBalanceUSD        *float64 `json:"addon_balance_usd,omitempty"`
+	TotalBalanceUSD        *float64 `json:"total_balance_usd,omitempty"`
+	PointsCycleStartTime   *int64   `json:"points_cycle_start_time,omitempty"`
+	NextDailyGrantTime     *int64   `json:"next_daily_grant_time,omitempty"`
+	NextMonthlyGrantTime   *int64   `json:"next_monthly_grant_time,omitempty"`
+	NextDailyGrantAmount   *float64 `json:"next_daily_grant_amount,omitempty"`
+	NextMonthlyGrantAmount *float64 `json:"next_monthly_grant_amount,omitempty"`
+	AutoRecharge           *bool    `json:"auto_recharge,omitempty"`
+}
+
+type PoeResult struct {
+	Usage *PoeUsagePayload `json:"usage"`
+}
+
 type ProviderHandler interface {
 	Check(context.Context, ProviderInput) (ProviderOutput, error)
 }

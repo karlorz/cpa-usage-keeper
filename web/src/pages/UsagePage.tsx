@@ -2223,6 +2223,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                       onPageSizeChange={credentialsData.setAiProviderPageSize}
                       onActiveOnlyChange={credentialsData.setAiProviderActiveOnly}
                       onSortChange={credentialsData.setAiProviderSort}
+                      onRefreshQuotaForAuthIndex={credentialsData.refreshQuotaForAuthIndex}
                     />
                   )}
                 </div>

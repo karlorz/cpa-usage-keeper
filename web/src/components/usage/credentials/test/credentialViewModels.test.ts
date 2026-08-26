@@ -5,6 +5,7 @@ import {
   buildAiProviderCredentialRows,
   buildAuthFileCredentialRows,
   paginateCredentials,
+  selectPoeQuotaEligibleAuthIndexes,
   selectQuotaEligibleAuthIndexes,
   splitCredentialIdentities,
 } from '../credentialViewModels'
@@ -28,6 +29,7 @@ function identity(overrides: Partial<UsageIdentity>): UsageIdentity {
     identity: overrides.identity ?? 'auth-1',
     type: overrides.type ?? 'claude',
     provider: overrides.provider ?? 'claude',
+    disabled: overrides.disabled ?? false,
     priority: overrides.priority,
     subscription: overrides.subscription,
     total_requests: overrides.total_requests ?? 0,
@@ -589,6 +591,64 @@ describe('credentialViewModels', () => {
     expect(rows[0].successRate).toBe(75)
     expect(rows[0].totalTokens).toBe(0)
     expect(rows[0].cacheReadRate).toBeNull()
-    expect('displayQuotas' in rows[0]).toBe(false)
+    expect(rows[0].displayQuotas).toEqual([])
+    expect(rows[0].quotaLoading).toBe(false)
+    expect(rows[0].hasPoeQuota).toBe(false)
+  })
+
+  it('selects only enabled non-deleted poe AI providers for quota requests', () => {
+    const identities = [
+      identity({ auth_type: 2, identity: 'poe-active', provider: 'poe' }),
+      identity({ auth_type: 2, identity: 'poe-disabled', provider: 'poe', disabled: true }),
+      identity({ auth_type: 2, identity: 'poe-deleted', provider: 'poe', is_deleted: true }),
+      identity({ auth_type: 2, identity: 'claude-active', provider: 'claude' }),
+      identity({ auth_type: 1, identity: 'auth-active' }),
+    ]
+
+    expect(selectPoeQuotaEligibleAuthIndexes(identities)).toEqual(['poe-active'])
+  })
+
+  it('builds poe AI provider rows with number-forward quota display', () => {
+    const quotas = new Map<string, UsageQuotaCheckResponse>([
+      ['poe-key', quotaResponse('poe-key', [
+        { key: 'current_point_balance', label: 'Compute Points', scope: 'billing', metric: 'points', remaining: 4_000 },
+        { key: 'plan_points_balance', label: 'Plan Points', scope: 'billing', metric: 'points', remaining: 2_500 },
+        { key: 'addon_point_balance', label: 'Add-on Points', scope: 'billing', metric: 'points', remaining: 500 },
+        { key: 'total_balance_usd', label: 'USD Equivalent', scope: 'billing', metric: 'usd_cents', used: 123_45 },
+        { key: 'next_daily_grant', label: 'Next Daily Grant', scope: 'billing', metric: 'points', remaining: 1_500, resetAt: '2026-08-26T10:00:00+08:00' },
+      ])],
+    ])
+
+    const rows = buildAiProviderCredentialRows([
+      identity({ auth_type: 2, identity: 'poe-key', provider: 'poe' }),
+    ], quotas)
+
+    expect(rows[0].hasPoeQuota).toBe(true)
+    expect(rows[0].quota).toHaveLength(5)
+    expect(rows[0].displayQuotas.map((quota) => quota.key)).toEqual(['current_point_balance', 'plan_points_balance', 'addon_point_balance', 'total_balance_usd', 'next_daily_grant'])
+    const balanceRow = rows[0].displayQuotas.find((quota) => quota.key === 'current_point_balance')
+    expect(balanceRow?.label).toBe('Compute Points')
+    expect(balanceRow?.remaining).toBe(4_000)
+    expect(balanceRow?.barPercent).toBeNull()
+    const usdRow = rows[0].displayQuotas.find((quota) => quota.key === 'total_balance_usd')
+    expect(usdRow?.billingUsage?.used).toBe('$123.45')
+    const grantRow = rows[0].displayQuotas.find((quota) => quota.key === 'next_daily_grant')
+    expect(grantRow?.resetText).toBe('2026-08-26T10:00:00+08:00')
+  })
+
+  it('keeps non-poe AI provider rows free of quota display data', () => {
+    const quotas = new Map<string, UsageQuotaCheckResponse>([
+      ['claude-key', quotaResponse('claude-key', [
+        { key: 'current_point_balance', label: 'Compute Points', scope: 'billing', metric: 'points', remaining: 1 },
+      ])],
+    ])
+
+    const rows = buildAiProviderCredentialRows([
+      identity({ auth_type: 2, identity: 'claude-key', provider: 'claude' }),
+    ], quotas)
+
+    expect(rows[0].hasPoeQuota).toBe(false)
+    expect(rows[0].quota).toHaveLength(1)
+    expect(rows[0].displayQuotas).toEqual([])
   })
 })

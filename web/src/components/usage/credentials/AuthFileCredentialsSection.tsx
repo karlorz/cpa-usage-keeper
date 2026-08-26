@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { MainActionButton } from '@/components/ui/MainActionButton'
 import { Modal } from '@/components/ui/Modal'
-import { IconChartLine, IconGaugeReset, IconRefreshCw, IconSearch, IconSettings, IconShield, IconTrash2 } from '@/components/ui/icons'
+import { IconChartLine, IconDiamond, IconGaugeReset, IconRefreshCw, IconSearch, IconSettings, IconShield, IconTimer, IconTrash2 } from '@/components/ui/icons'
 import quotaCostIcon from '@/assets/icons/quota-cost.svg'
 import quotaTokenIcon from '@/assets/icons/quota-token.svg'
 import styles from './CredentialSections.module.scss'
@@ -1849,6 +1849,81 @@ export function formatQuotaBillingUsageAriaLabel(t: Translate, billingUsage: Non
     limit: billingUsage.limit ?? '-',
     remaining: billingUsage.remaining ?? '-',
   })
+}
+
+// PoePoeQuotaPanel 展示 Poe compute-points 余额的 number-forward 行：只显示数值与授予计划，不渲染进度条。
+export function PoePoeQuotaPanel({ row }: { row: { quotaLoading: boolean; quotaError?: string; refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'; displayQuotas: DisplayQuota[] } }) {
+  const { t } = useTranslation()
+
+  if (row.quotaLoading) {
+    return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_loading')}</div></div>
+  }
+  if (row.quotaError) {
+    const errorDisplay = formatQuotaErrorDisplay(row.quotaError)
+    return (
+      <div className={styles.credentialQuotaStateSlot}>
+        <div className={styles.credentialQuotaErrorSummary} title={errorDisplay.title}>
+          {errorDisplay.code && <span className={styles.credentialQuotaErrorCode}>{errorDisplay.code}</span>}
+          <span className={styles.credentialQuotaErrorMessage}>{errorDisplay.message}</span>
+        </div>
+      </div>
+    )
+  }
+  if (row.refreshStatus === 'queued' || row.refreshStatus === 'running') {
+    return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaRefreshStatus}>{t(`usage_stats.credentials_refresh_status_${row.refreshStatus}`)}</div></div>
+  }
+  if (row.displayQuotas.length === 0) {
+    return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_unavailable')}</div></div>
+  }
+
+  return (
+    <div className={styles.credentialQuotaPanel}>
+      <div className={styles.credentialPoeQuotaGrid}>
+        {row.displayQuotas.map((quota) => <PoeQuotaMetric key={quota.key} quota={quota} />)}
+      </div>
+    </div>
+  )
+}
+
+function PoeQuotaMetric({ quota }: { quota: DisplayQuota }) {
+  const { t } = useTranslation()
+
+  if (quota.key === 'total_balance_usd') {
+    const usedText = quota.billingUsage?.used
+    return (
+      <div className={styles.credentialPoeMetric} aria-label={t('usage_stats.credentials_poe_aria_usd_equivalent', { count: usedText ?? '-' })}>
+        <IconDiamond size={12} className={styles.credentialPoeMetricIcon} />
+        <span className={styles.credentialPoeMetricLabel}>{t('usage_stats.credentials_poe_usd_equivalent')}</span>
+        <strong className={styles.credentialPoeMetricValue}>{usedText ?? '-'}</strong>
+      </div>
+    )
+  }
+
+  if (quota.key === 'next_daily_grant') {
+    const amount = quota.remaining
+    const grantLabel = t('usage_stats.credentials_poe_next_grant')
+    return (
+      <div className={styles.credentialPoeMetric} aria-label={t('usage_stats.credentials_poe_aria_next_grant', { count: amount ?? 0 })}>
+        <IconTimer size={12} className={styles.credentialPoeMetricIcon} />
+        <span className={styles.credentialPoeMetricLabel}>{grantLabel}</span>
+        {amount !== undefined && <strong className={styles.credentialPoeMetricValue}>{formatPoePoints(amount)}</strong>}
+        {quota.resetText ? <span className={styles.credentialPoeMetricReset}>{formatQuotaResetLabel(quota.resetText)}</span> : null}
+      </div>
+    )
+  }
+
+  const ariaKey = quota.key === 'current_point_balance' ? 'credentials_poe_aria_current_balance' : undefined
+  return (
+    <div className={styles.credentialPoeMetric} aria-label={ariaKey ? t(ariaKey, { count: quota.remaining ?? 0 }) : undefined}>
+      <IconDiamond size={12} className={styles.credentialPoeMetricIcon} />
+      <span className={styles.credentialPoeMetricLabel}>{quota.label}</span>
+      {quota.remaining !== undefined && <strong className={styles.credentialPoeMetricValue}>{formatPoePoints(quota.remaining)}</strong>}
+    </div>
+  )
+}
+
+function formatPoePoints(value: number): string {
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
 }
 
 function QuotaBar({ quota, quotaUsageMode }: { quota: DisplayQuota; quotaUsageMode: QuotaUsageMode }) {

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   buildAiProviderCredentialRows,
   buildAuthFileCredentialRows,
+  selectPoeQuotaEligibleAuthIndexes,
   selectQuotaEligibleAuthIndexes,
   type AiProviderCredentialRow,
   type AuthFileCredentialRow,
@@ -81,14 +82,18 @@ export function useCredentialsTabData({ enabledAuthFiles, enabledAiProviders, on
     () => selectQuotaEligibleAuthIndexes(credentialPages.authFileIdentities),
     [credentialPages.authFileIdentities],
   )
+  const currentPoeAuthIndexes = useMemo(
+    () => selectPoeQuotaEligibleAuthIndexes(credentialPages.aiProviderIdentities),
+    [credentialPages.aiProviderIdentities],
+  )
   const { quotaResponseByAuthIndex, cachedQuotaStateByAuthIndex, setQuotaResponseByAuthIndex, refreshQuotaCache } = useQuotaCache({
-    enabled: enabledAuthFiles,
-    authIndexes: currentAuthIndexes,
+    enabled: enabledAuthFiles || enabledAiProviders,
+    authIndexes: [...currentAuthIndexes, ...currentPoeAuthIndexes],
     onAuthRequired,
   })
   const quotaRefreshTasks = useQuotaRefreshTasks({
-    enabled: enabledAuthFiles,
-    currentAuthIndexes,
+    enabled: enabledAuthFiles || enabledAiProviders,
+    currentAuthIndexes: [...currentAuthIndexes, ...currentPoeAuthIndexes],
     setQuotaResponseByAuthIndex,
     onAuthRequired,
   })
@@ -112,8 +117,8 @@ export function useCredentialsTabData({ enabledAuthFiles, enabledAiProviders, on
     [credentialPages.authFileIdentities, quotaResponsesByAuthIndex, quotaStates],
   )
   const aiProviderRows = useMemo(
-    () => buildAiProviderCredentialRows(credentialPages.aiProviderIdentities),
-    [credentialPages.aiProviderIdentities],
+    () => buildAiProviderCredentialRows(credentialPages.aiProviderIdentities, quotaResponsesByAuthIndex, quotaStates),
+    [credentialPages.aiProviderIdentities, quotaResponsesByAuthIndex, quotaStates],
   )
   const refreshCredentialPages = credentialPages.refresh
   const refresh = useCallback(async () => {
