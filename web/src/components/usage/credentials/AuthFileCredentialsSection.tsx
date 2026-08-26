@@ -1851,7 +1851,7 @@ export function formatQuotaBillingUsageAriaLabel(t: Translate, billingUsage: Non
   })
 }
 
-// PoePoeQuotaPanel 展示 Poe compute-points 余额的 number-forward 行：只显示数值与授予计划，不渲染进度条。
+// PoePoeQuotaPanel 展示 Poe compute-points 余额与授予计划：余额类走 OAuth 风格的进度条，授予行保留 number-forward。
 export function PoePoeQuotaPanel({ row }: { row: { quotaLoading: boolean; quotaError?: string; refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'; displayQuotas: DisplayQuota[] } }) {
   const { t } = useTranslation()
 
@@ -1876,11 +1876,21 @@ export function PoePoeQuotaPanel({ row }: { row: { quotaLoading: boolean; quotaE
     return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_unavailable')}</div></div>
   }
 
+  const barQuotas = row.displayQuotas.filter((quota) => quota.barPercent !== null)
+  const numberQuotas = row.displayQuotas.filter((quota) => quota.barPercent === null)
+
   return (
     <div className={styles.credentialQuotaPanel}>
-      <div className={styles.credentialPoeQuotaGrid}>
-        {row.displayQuotas.map((quota) => <PoeQuotaMetric key={quota.key} quota={quota} />)}
-      </div>
+      {barQuotas.length > 0 && (
+        <div className={styles.credentialQuotaBars}>
+          {barQuotas.map((quota) => <QuotaBar key={quota.key} quota={quota} quotaUsageMode="current" />)}
+        </div>
+      )}
+      {numberQuotas.length > 0 && (
+        <div className={`${styles.credentialPoeQuotaGrid} ${styles.credentialPoeQuotaBarGrid}`.trim()}>
+          {numberQuotas.map((quota) => <PoeQuotaMetric key={quota.key} quota={quota} />)}
+        </div>
+      )}
     </div>
   )
 }

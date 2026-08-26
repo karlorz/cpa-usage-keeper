@@ -13,7 +13,7 @@ import (
 func TestPoeProviderCallsUsageRequest(t *testing.T) {
 	caller := &recordingManagementCaller{responses: []*apicall.Response{{
 		StatusCode: 200,
-		BodyText: `{"current_point_balance":300,"plan_points_balance":300,"addon_point_balance":0,"plan_balance_usd":"0.0091","addon_balance_usd":"0.0000","total_balance_usd":"0.0091","points_cycle_start_time":1787788800000000,"next_daily_grant_time":1787788800000000,"next_monthly_grant_time":0,"next_daily_grant_amount":300,"next_monthly_grant_amount":0,"auto_recharge":null}`,
+		BodyText:   `{"current_point_balance":300,"plan_points_balance":300,"addon_point_balance":0,"plan_balance_usd":"0.0091","addon_balance_usd":"0.0000","total_balance_usd":"0.0091","points_cycle_start_time":1787788800000000,"next_daily_grant_time":1787788800000000,"next_monthly_grant_time":0,"next_daily_grant_amount":300,"next_monthly_grant_amount":0,"auto_recharge":null}`,
 		Body:       json.RawMessage(`{"current_point_balance":300,"plan_points_balance":300,"addon_point_balance":0,"plan_balance_usd":"0.0091","addon_balance_usd":"0.0000","total_balance_usd":"0.0091","points_cycle_start_time":1787788800000000,"next_daily_grant_time":1787788800000000,"next_monthly_grant_time":0,"next_daily_grant_amount":300,"next_monthly_grant_amount":0,"auto_recharge":null}`),
 	}}}
 	provider := quota.NewPoeProvider(caller, quota.DefaultProviderConfigs().Poe)
@@ -56,7 +56,7 @@ func TestPoeProviderCallsUsageRequest(t *testing.T) {
 }
 
 func TestPoeProviderNormalizesNumberForwardQuotaRows(t *testing.T) {
-	body := json.RawMessage(`{"current_point_balance":300,"plan_points_balance":280,"addon_point_balance":20,"plan_balance_usd":"0.0091","addon_balance_usd":"0.0006","total_balance_usd":"0.0097","points_cycle_start_time":1787788800000000,"next_daily_grant_time":1787868000000000,"next_daily_grant_amount":300,"auto_recharge":null}`)
+	body := json.RawMessage(`{"current_point_balance":300,"plan_points_balance":280,"addon_point_balance":20,"plan_balance_usd":"0.0091","addon_balance_usd":"0.0006","total_balance_usd":"0.0097","points_cycle_start_time":1787788800000000,"next_daily_grant_time":1787868000000000,"next_daily_grant_amount":300,"next_monthly_grant_time":1790121600000000,"next_monthly_grant_amount":12500,"auto_recharge":null}`)
 	caller := &recordingManagementCaller{responses: []*apicall.Response{{
 		StatusCode: 200,
 		BodyText:   string(body),
@@ -69,8 +69,8 @@ func TestPoeProviderNormalizesNumberForwardQuotaRows(t *testing.T) {
 		t.Fatalf("Check returned error: %v", err)
 	}
 	rows := quota.NormalizeQuotaRows(output)
-	if len(rows) != 5 {
-		t.Fatalf("expected five poe quota rows, got %#v", rows)
+	if len(rows) != 6 {
+		t.Fatalf("expected six poe quota rows, got %#v", rows)
 	}
 
 	balance := findQuotaRow(t, rows, "current_point_balance")
@@ -92,6 +92,17 @@ func TestPoeProviderNormalizesNumberForwardQuotaRows(t *testing.T) {
 	assertFloatField(t, grant.Remaining, 300, "next daily grant amount")
 	if grant.ResetAt == "" {
 		t.Fatalf("expected next daily grant resetAt, got %#v", grant)
+	}
+
+	monthly := findQuotaRow(t, rows, "next_monthly_grant")
+	assertQuotaText(t, monthly, "Next Monthly Grant", "billing", "points")
+	assertFloatField(t, monthly.Remaining, 280, "next monthly grant plan balance")
+	assertFloatField(t, monthly.Limit, 12500, "next monthly grant amount")
+	if monthly.Window == nil || monthly.Window.Seconds == nil || *monthly.Window.Seconds != quotaWindowAverageMonthSeconds {
+		t.Fatalf("expected monthly average window seconds on next_monthly_grant, got %#v", monthly.Window)
+	}
+	if monthly.ResetAt == "" {
+		t.Fatalf("expected next monthly grant resetAt, got %#v", monthly)
 	}
 }
 

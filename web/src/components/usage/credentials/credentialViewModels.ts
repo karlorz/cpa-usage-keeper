@@ -483,7 +483,7 @@ function isDisplayableQuota(quota: DisplayQuota | undefined): quota is DisplayQu
 
 // isDisplayableQuotaOrPoe 对 Poe number-forward 行放行（无水位条，仅展示数值与授予计划）。
 function isDisplayableQuotaOrPoe(quota: DisplayQuota | undefined): quota is DisplayQuota {
-  return quota !== undefined && (quota.barPercent !== null || quota.scope === 'billing' || quota.key === 'next_daily_grant')
+  return quota !== undefined && (quota.barPercent !== null || quota.scope === 'billing' || quota.key === 'next_daily_grant' || quota.key === 'next_monthly_grant')
 }
 
 function credentialDisplayName(identity: UsageIdentity): string {
