@@ -694,7 +694,8 @@ func normalizePoeQuotaRows(result PoeResult) []QuotaRow {
 			Remaining: usage.CurrentPointBalance,
 		})
 	}
-	if usage.PlanPointsBalance != nil {
+	// 当无附加点数时 Plan Points 与 Compute Points 数值完全相同，只在二者有差异时保留 Plan Points，避免重复展示。
+	if usage.PlanPointsBalance != nil && (usage.CurrentPointBalance == nil || *usage.PlanPointsBalance != *usage.CurrentPointBalance) {
 		rows = append(rows, QuotaRow{
 			Key:       "plan_points_balance",
 			Label:     "Plan Points",
@@ -725,7 +726,7 @@ func normalizePoeQuotaRows(result PoeResult) []QuotaRow {
 	if usage.NextMonthlyGrantTime != nil && *usage.NextMonthlyGrantTime > 0 && usage.NextMonthlyGrantAmount != nil && *usage.NextMonthlyGrantAmount > 0 {
 		row := QuotaRow{
 			Key:       "next_monthly_grant",
-			Label:     "Next Monthly Grant",
+			Label:     "Monthly",
 			Scope:     "billing",
 			Metric:    "points",
 			Remaining: usage.PlanPointsBalance,

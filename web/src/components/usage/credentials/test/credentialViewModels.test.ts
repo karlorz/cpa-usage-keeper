@@ -616,7 +616,7 @@ describe('credentialViewModels', () => {
         { key: 'plan_points_balance', label: 'Plan Points', scope: 'billing', metric: 'points', remaining: 2_500 },
         { key: 'addon_point_balance', label: 'Add-on Points', scope: 'billing', metric: 'points', remaining: 500 },
         { key: 'total_balance_usd', label: 'USD Equivalent', scope: 'billing', metric: 'usd_cents', used: 123_45 },
-        { key: 'next_monthly_grant', label: 'Next Monthly Grant', scope: 'billing', metric: 'points', remaining: 2_500, limit: 12_500, window: { seconds: 2_628_000 }, resetAt: '2026-09-23T08:00:00+08:00' },
+        { key: 'next_monthly_grant', label: 'Monthly', scope: 'billing', metric: 'points', remaining: 2_500, limit: 12_500, window: { seconds: 2_628_000 }, resetAt: '2026-09-23T08:00:00+08:00' },
       ])],
     ])
 
@@ -635,7 +635,7 @@ describe('credentialViewModels', () => {
     expect(usdRow?.billingUsage?.used).toBe('$123.45')
     expect(rows[0].displayQuotas.find((quota) => quota.key === 'next_daily_grant')).toBeUndefined()
     const monthlyRow = rows[0].displayQuotas.find((quota) => quota.key === 'next_monthly_grant')
-    expect(monthlyRow?.label).toBe('Next Monthly Grant')
+    expect(monthlyRow?.label).toBe('Monthly')
     expect(monthlyRow?.barPercent).toBe(20)
     expect(monthlyRow?.percentKind).toBe('remaining')
     expect(monthlyRow?.status).toBe('warning')
