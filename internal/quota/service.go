@@ -291,6 +291,10 @@ func (s *Service) Check(ctx context.Context, request CheckRequest) (CheckRespons
 		}
 	}
 	// 按相邻项目规则先匹配 provider 再匹配 type，解析出实际要调用的 quota handler。
+	// AI provider 身份只有 Poe 精确匹配时才进入 provider 调用链路；普通 auth file 保持原语义。
+	if identity.AuthType == entities.UsageIdentityAuthTypeAIProvider && !s.isPoeQuotaIdentity(identity) {
+		return CheckResponse{}, fmt.Errorf("%w: %s", ErrUnsupportedType, normalizeIdentityType(identity.Provider))
+	}
 	_, handler, ok := s.resolveQuotaHandlerForIdentity(identity)
 	if !ok {
 		return CheckResponse{}, fmt.Errorf("%w: %s", ErrUnsupportedType, normalizeIdentityType(identity.Provider))
@@ -336,8 +340,17 @@ func (s *Service) resolveQuotaHandler(provider string, identityType string) (str
 	return "", nil, false
 }
 
+// resolveQuotaHandlerForIdentity 按 provider 优先、type 兜底解析 handler，并配合单独的 provider 精确匹配校验。
 func (s *Service) resolveQuotaHandlerForIdentity(identity entities.UsageIdentity) (string, ProviderHandler, bool) {
 	return s.resolveQuotaHandler(identity.Provider, identity.Type)
+}
+
+// isPoeQuotaIdentity 判断身份是否由 Poe compute-points provider 处理：registry 解析成功，且 provider 精确等于 poe。
+func (s *Service) isPoeQuotaIdentity(identity entities.UsageIdentity) bool {
+	if _, _, ok := s.resolveQuotaHandler(identity.Provider, identity.Type); !ok {
+		return false
+	}
+	return normalizeIdentityType(identity.Provider) == "poe"
 }
 
 // activePoeAIProviderIdentityByAuthIndex 只在 auth file 记录缺失时，为 poe AI provider 身份放行。

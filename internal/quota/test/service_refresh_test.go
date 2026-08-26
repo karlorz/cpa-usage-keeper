@@ -611,6 +611,25 @@ func TestRefreshAcceptsActivePoeAIProviderIdentity(t *testing.T) {
 	}
 }
 
+func TestRefreshRejectsPoePrefixedProviderIdentity(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "poe-lite-auth", Provider: "poe-lite-dd", Type: "openai", AuthType: entities.UsageIdentityAuthTypeAIProvider, Name: "Poe Lite"})
+	handler := &refreshHandlerStub{output: ProviderOutput{Provider: "poe", Result: PoeResult{Usage: &PoeUsagePayload{CurrentPointBalance: float64Ptr(300)}}}}
+	service := newQuotaServiceWithRegistry(t, db, NewProviderRegistry(map[string]ProviderHandler{"poe": handler}))
+	setRefreshCooldown(service, func(time.Duration) {})
+
+	response, err := service.Refresh(context.Background(), RefreshRequest{AuthIndexes: []string{"poe-lite-auth"}, Source: RefreshSourceManual})
+	if err != nil {
+		t.Fatalf("Refresh returned error: %v", err)
+	}
+	if response.Accepted != 0 || !hasRefreshRejection(response.Rejected, "poe-lite-auth", "not_auth_file") {
+		t.Fatalf("expected poe-prefixed provider refresh to be rejected, got %+v", response)
+	}
+	if handler.callCount() != 0 {
+		t.Fatalf("expected provider not to be called for poe-prefixed identity, got %d calls", handler.callCount())
+	}
+}
+
 func TestManualRefreshReturnsDuplicateForRunningTaskEvenWhenIdentityDeleted(t *testing.T) {
 	db := openQuotaTestDatabase(t)
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})

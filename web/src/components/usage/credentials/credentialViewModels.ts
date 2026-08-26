@@ -129,16 +129,22 @@ export function selectQuotaEligibleAuthIndexes(identities: UsageIdentity[]): str
     .map((identity) => identity.identity)
 }
 
-// selectPoeQuotaEligibleAuthIndexes 只挑选当前页启用、未删除的 poe AI Provider 身份，用于行内 quota 缓存与刷新。
+// selectPoeQuotaEligibleAuthIndexes 只挑选当前页启用、未删除且 provider 以 poe 开头的 AI Provider 身份，
+// 用于行内 quota 缓存与刷新。后端 validateRefreshAuthIndex 对 provider 精确匹配 poe，这里保持一致。
 export function selectPoeQuotaEligibleAuthIndexes(identities: UsageIdentity[]): string[] {
   return identities
     .filter((identity) => (
       identity.auth_type === 2
       && !identity.is_deleted
       && !identity.disabled
-      && identity.provider?.trim().toLowerCase() === 'poe'
+      && identity.provider?.trim().toLowerCase().startsWith('poe')
     ))
     .map((identity) => identity.identity)
+}
+
+// isPoeProviderIdentity 与后端 isPoeQuotaIdentity 口径一致：provider 精确等于 poe。
+export function isPoeProviderIdentity(identity: Pick<UsageIdentity, 'provider'>): boolean {
+  return identity.provider?.trim().toLowerCase() === 'poe'
 }
 
 export function paginateCredentials<T>(items: T[], page: number, pageSize = CREDENTIALS_PAGE_SIZE): CredentialsPage<T> {
@@ -204,7 +210,7 @@ export function buildAiProviderCredentialRows(
   quotaStates: Map<string, Pick<AiProviderCredentialRow, 'quotaLoading' | 'quotaError' | 'refreshStatus'>> = new Map(),
 ): AiProviderCredentialRow[] {
   return identities.map((identity) => {
-    const isPoe = identity.provider?.trim().toLowerCase() === 'poe'
+    const isPoe = isPoeProviderIdentity(identity)
     const quotaResponse = quotas.get(identity.identity)
     const quota = quotaResponse?.quota ?? []
     const state = quotaStates.get(identity.identity)

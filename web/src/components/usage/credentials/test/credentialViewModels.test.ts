@@ -599,13 +599,14 @@ describe('credentialViewModels', () => {
   it('selects only enabled non-deleted poe AI providers for quota requests', () => {
     const identities = [
       identity({ auth_type: 2, identity: 'poe-active', provider: 'poe' }),
+      identity({ auth_type: 2, identity: 'poe-lite-dd', provider: 'poe-lite-dd' }),
       identity({ auth_type: 2, identity: 'poe-disabled', provider: 'poe', disabled: true }),
       identity({ auth_type: 2, identity: 'poe-deleted', provider: 'poe', is_deleted: true }),
       identity({ auth_type: 2, identity: 'claude-active', provider: 'claude' }),
       identity({ auth_type: 1, identity: 'auth-active' }),
     ]
 
-    expect(selectPoeQuotaEligibleAuthIndexes(identities)).toEqual(['poe-active'])
+    expect(selectPoeQuotaEligibleAuthIndexes(identities)).toEqual(['poe-active', 'poe-lite-dd'])
   })
 
   it('builds poe AI provider rows with number-forward quota display', () => {
