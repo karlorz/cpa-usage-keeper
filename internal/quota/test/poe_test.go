@@ -69,8 +69,8 @@ func TestPoeProviderNormalizesNumberForwardQuotaRows(t *testing.T) {
 		t.Fatalf("Check returned error: %v", err)
 	}
 	rows := quota.NormalizeQuotaRows(output)
-	if len(rows) != 6 {
-		t.Fatalf("expected six poe quota rows, got %#v", rows)
+	if len(rows) != 5 {
+		t.Fatalf("expected five poe quota rows, got %#v", rows)
 	}
 
 	balance := findQuotaRow(t, rows, "current_point_balance")
@@ -87,11 +87,8 @@ func TestPoeProviderNormalizesNumberForwardQuotaRows(t *testing.T) {
 	assertQuotaText(t, usd, "USD Equivalent", "billing", "usd_cents")
 	assertFloatField(t, usd.Used, 0.97, "usd equivalent cents")
 
-	grant := findQuotaRow(t, rows, "next_daily_grant")
-	assertQuotaText(t, grant, "Next Daily Grant", "billing", "points")
-	assertFloatField(t, grant.Remaining, 300, "next daily grant amount")
-	if grant.ResetAt == "" {
-		t.Fatalf("expected next daily grant resetAt, got %#v", grant)
+	if findRowOrNil(rows, "next_daily_grant") != nil {
+		t.Fatalf("expected next_daily_grant row to be omitted, got %#v", findRowOrNil(rows, "next_daily_grant"))
 	}
 
 	monthly := findQuotaRow(t, rows, "next_monthly_grant")
@@ -124,7 +121,7 @@ func TestPoeProviderSkipsZeroAddonAndMissingGrant(t *testing.T) {
 		t.Fatalf("expected three poe quota rows (no add-on, no grant row), got %#v", rows)
 	}
 	for _, row := range rows {
-		if row.Key == "addon_point_balance" || row.Key == "next_daily_grant" {
+		if row.Key == "addon_point_balance" || row.Key == "next_daily_grant" || row.Key == "next_monthly_grant" {
 			t.Fatalf("expected addon/grant rows to be omitted, got %#v", row)
 		}
 	}

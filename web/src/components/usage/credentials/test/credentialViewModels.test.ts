@@ -616,7 +616,6 @@ describe('credentialViewModels', () => {
         { key: 'plan_points_balance', label: 'Plan Points', scope: 'billing', metric: 'points', remaining: 2_500 },
         { key: 'addon_point_balance', label: 'Add-on Points', scope: 'billing', metric: 'points', remaining: 500 },
         { key: 'total_balance_usd', label: 'USD Equivalent', scope: 'billing', metric: 'usd_cents', used: 123_45 },
-        { key: 'next_daily_grant', label: 'Next Daily Grant', scope: 'billing', metric: 'points', remaining: 1_500, resetAt: '2026-08-26T10:00:00+08:00' },
         { key: 'next_monthly_grant', label: 'Next Monthly Grant', scope: 'billing', metric: 'points', remaining: 2_500, limit: 12_500, window: { seconds: 2_628_000 }, resetAt: '2026-09-23T08:00:00+08:00' },
       ])],
     ])
@@ -626,16 +625,15 @@ describe('credentialViewModels', () => {
     ], quotas)
 
     expect(rows[0].hasPoeQuota).toBe(true)
-    expect(rows[0].quota).toHaveLength(6)
-    expect(rows[0].displayQuotas.map((quota) => quota.key)).toEqual(['current_point_balance', 'plan_points_balance', 'addon_point_balance', 'total_balance_usd', 'next_daily_grant', 'next_monthly_grant'])
+    expect(rows[0].quota).toHaveLength(5)
+    expect(rows[0].displayQuotas.map((quota) => quota.key)).toEqual(['current_point_balance', 'plan_points_balance', 'addon_point_balance', 'total_balance_usd', 'next_monthly_grant'])
     const balanceRow = rows[0].displayQuotas.find((quota) => quota.key === 'current_point_balance')
     expect(balanceRow?.label).toBe('Compute Points')
     expect(balanceRow?.remaining).toBe(4_000)
     expect(balanceRow?.barPercent).toBeNull()
     const usdRow = rows[0].displayQuotas.find((quota) => quota.key === 'total_balance_usd')
     expect(usdRow?.billingUsage?.used).toBe('$123.45')
-    const grantRow = rows[0].displayQuotas.find((quota) => quota.key === 'next_daily_grant')
-    expect(grantRow?.resetText).toBe('2026-08-26T10:00:00+08:00')
+    expect(rows[0].displayQuotas.find((quota) => quota.key === 'next_daily_grant')).toBeUndefined()
     const monthlyRow = rows[0].displayQuotas.find((quota) => quota.key === 'next_monthly_grant')
     expect(monthlyRow?.label).toBe('Next Monthly Grant')
     expect(monthlyRow?.barPercent).toBe(20)

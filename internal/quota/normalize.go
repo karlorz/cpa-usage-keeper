@@ -721,19 +721,6 @@ func normalizePoeQuotaRows(result PoeResult) []QuotaRow {
 			Used:   poeUSDToCents(usage.TotalBalanceUSD),
 		})
 	}
-	if usage.NextDailyGrantTime != nil && *usage.NextDailyGrantTime > 0 {
-		row := QuotaRow{
-			Key:   "next_daily_grant",
-			Label: "Next Daily Grant",
-			Scope: "billing",
-		}
-		if usage.NextDailyGrantAmount != nil {
-			row.Metric = "points"
-			row.Remaining = usage.NextDailyGrantAmount
-		}
-		row.ResetAt = timeutil.FormatStorageTime(poeUnixMicrosToTime(*usage.NextDailyGrantTime))
-		rows = append(rows, row)
-	}
 	// 月度授予计划行：以 plan_points_balance 为已授予余额、月度发放额度为上限，剩余比例驱动 OAuth 风格水位条。
 	if usage.NextMonthlyGrantTime != nil && *usage.NextMonthlyGrantTime > 0 && usage.NextMonthlyGrantAmount != nil && *usage.NextMonthlyGrantAmount > 0 {
 		row := QuotaRow{
