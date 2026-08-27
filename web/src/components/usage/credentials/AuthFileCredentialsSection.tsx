@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { MainActionButton } from '@/components/ui/MainActionButton'
 import { Modal } from '@/components/ui/Modal'
-import { IconChartLine, IconDiamond, IconGaugeReset, IconRefreshCw, IconSearch, IconSettings, IconShield, IconTrash2 } from '@/components/ui/icons'
+import { IconChartLine, IconGaugeReset, IconRefreshCw, IconSearch, IconSettings, IconShield, IconTrash2 } from '@/components/ui/icons'
 import quotaCostIcon from '@/assets/icons/quota-cost.svg'
 import quotaTokenIcon from '@/assets/icons/quota-token.svg'
 import styles from './CredentialSections.module.scss'
@@ -1904,7 +1904,6 @@ function PoeQuotaMetric({ quota }: { quota: DisplayQuota }) {
     const usedText = quota.billingUsage?.used
     return (
       <div className={styles.credentialPoeMetric} aria-label={t('usage_stats.credentials_poe_aria_usd_equivalent', { count: usedText ?? '-' })}>
-        <IconDiamond size={12} className={styles.credentialPoeMetricIcon} />
         <span className={styles.credentialPoeMetricLabel}>{t('usage_stats.credentials_poe_usd_equivalent')}</span>
         <strong className={styles.credentialPoeMetricValue}>{usedText ?? '-'}</strong>
       </div>
@@ -1914,7 +1913,6 @@ function PoeQuotaMetric({ quota }: { quota: DisplayQuota }) {
   const ariaKey = quota.key === 'current_point_balance' ? 'credentials_poe_aria_current_balance' : undefined
   return (
     <div className={styles.credentialPoeMetric} aria-label={ariaKey ? t(ariaKey, { count: quota.remaining ?? 0 }) : undefined}>
-      <IconDiamond size={12} className={styles.credentialPoeMetricIcon} />
       <span className={styles.credentialPoeMetricLabel}>{quota.label}</span>
       {quota.remaining !== undefined && <strong className={styles.credentialPoeMetricValue}>{formatPoePoints(quota.remaining)}</strong>}
     </div>
