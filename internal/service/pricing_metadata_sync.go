@@ -488,6 +488,9 @@ func buildPricingSyncMatch(model string, metadataModel modelsDevModel, matchType
 	}
 
 	pricingStyle := pricingStyleForModelsDevModel(metadataModel)
+	if strings.EqualFold(providerID, "poe") || strings.EqualFold(providerName, "poe") {
+		pricingStyle = entities.ModelPricingStylePoe
+	}
 	cacheRead := 0.0
 	if metadataModel.Cost.CacheRead != nil {
 		cacheRead = *metadataModel.Cost.CacheRead

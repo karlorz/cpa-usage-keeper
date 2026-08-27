@@ -126,8 +126,8 @@ func normalizePricingInput(input servicedto.UpdatePricingInput) (repodto.ModelPr
 	if pricingStyle == "" {
 		pricingStyle = entities.ModelPricingStyleOpenAI
 	}
-	if pricingStyle != entities.ModelPricingStyleOpenAI && pricingStyle != entities.ModelPricingStyleClaude {
-		return repodto.ModelPriceSettingInput{}, fmt.Errorf("%w: pricing_style must be openai or claude", ErrInvalidPricingInput)
+	if pricingStyle != entities.ModelPricingStyleOpenAI && pricingStyle != entities.ModelPricingStyleClaude && pricingStyle != entities.ModelPricingStylePoe {
+		return repodto.ModelPriceSettingInput{}, fmt.Errorf("%w: pricing_style must be openai, claude, or poe", ErrInvalidPricingInput)
 	}
 	if input.PromptPricePer1M < 0 || input.CompletionPricePer1M < 0 || input.CacheReadPricePer1M < 0 || input.CacheWritePricePer1M < 0 {
 		return repodto.ModelPriceSettingInput{}, fmt.Errorf("%w: prices must be non-negative", ErrInvalidPricingInput)

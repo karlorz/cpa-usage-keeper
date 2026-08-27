@@ -5,6 +5,7 @@ import "time"
 const (
 	ModelPricingStyleOpenAI = "openai"
 	ModelPricingStyleClaude = "claude"
+	ModelPricingStylePoe    = "poe"
 )
 
 // ModelPriceSetting 是模型价格配置实体，用于按模型计算成本。

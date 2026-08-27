@@ -132,8 +132,10 @@ func normalizeModelPricingStyle(style string) (string, error) {
 		return entities.ModelPricingStyleOpenAI, nil
 	case entities.ModelPricingStyleClaude:
 		return entities.ModelPricingStyleClaude, nil
+	case entities.ModelPricingStylePoe:
+		return entities.ModelPricingStylePoe, nil
 	default:
-		return "", fmt.Errorf("pricing_style must be openai or claude")
+		return "", fmt.Errorf("pricing_style must be openai, claude, or poe")
 	}
 }
 
