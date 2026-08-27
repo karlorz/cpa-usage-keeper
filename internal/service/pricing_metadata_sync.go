@@ -13,11 +13,16 @@ import (
 
 	"cpa-usage-keeper/internal/entities"
 	servicedto "cpa-usage-keeper/internal/service/dto"
+	"gorm.io/gorm"
 )
 
 const (
 	pricingSyncMetadataSource = "Models.dev"
 	pricingSyncAPIURL         = "https://models.dev/api.json"
+	// poeCacheReadPayRate is the fraction of prompt price charged for Poe
+	// cache-read text. Verified 2026-08-27 on DeepSeek-V4-Flash: 114413 input
+	// chars, 113152 cache-discount chars, 89 output chars → $0.00337 vs Poe $0.0034.
+	poeCacheReadPayRate = 0.20
 )
 
 var pricingSyncHTTPClient = &http.Client{Timeout: 12 * time.Second}
@@ -70,7 +75,32 @@ func (s *pricingService) PreviewPricingSync(ctx context.Context) (servicedto.Pri
 	if err != nil {
 		return servicedto.PricingSyncPreview{}, err
 	}
-	return buildPricingSyncPreviewFromCatalog(models, catalog, pricingSyncAPIURL)
+	poePrefixes, err := listPoeIdentityPrefixSet(s.db)
+	if err != nil {
+		return servicedto.PricingSyncPreview{}, err
+	}
+	return buildPricingSyncPreviewFromCatalog(models, catalog, pricingSyncAPIURL, poePrefixes)
+}
+
+func listPoeIdentityPrefixSet(db *gorm.DB) (map[string]struct{}, error) {
+	prefixes := make(map[string]struct{})
+	if db == nil {
+		return prefixes, nil
+	}
+	var rows []string
+	if err := db.Model(&entities.UsageIdentity{}).
+		Where("provider = ?", "poe").
+		Pluck("prefix", &rows).Error; err != nil {
+		return nil, fmt.Errorf("list poe identity prefixes: %w", err)
+	}
+	for _, row := range rows {
+		prefix := strings.ToLower(strings.TrimSpace(row))
+		if prefix == "" {
+			continue
+		}
+		prefixes[prefix] = struct{}{}
+	}
+	return prefixes, nil
 }
 
 func fetchModelsDevCatalog(ctx context.Context, catalogURL string) (map[string]modelsDevProvider, error) {
@@ -105,6 +135,7 @@ func buildPricingSyncPreviewFromCatalog(
 	models []string,
 	catalog map[string]modelsDevProvider,
 	sourceURL string,
+	poePrefixes map[string]struct{},
 ) (servicedto.PricingSyncPreview, error) {
 	entries := flattenModelsDevCatalog(catalog)
 	index := buildPricingCatalogIndex(entries)
@@ -128,7 +159,7 @@ func buildPricingSyncPreviewFromCatalog(
 			continue
 		}
 
-		match, ok := buildPricingSyncMatchFromCandidates(model, candidates)
+		match, ok := buildPricingSyncMatchFromCandidates(model, candidates, poePrefixes)
 		if !ok {
 			unmatched = append(unmatched, model)
 			continue
@@ -197,7 +228,7 @@ func flattenModelsDevCatalog(catalog map[string]modelsDevProvider) []pricingCata
 	return entries
 }
 
-func buildPricingSyncMatchFromCandidates(model string, candidates []pricingSyncCandidate) (servicedto.PricingSyncMatch, bool) {
+func buildPricingSyncMatchFromCandidates(model string, candidates []pricingSyncCandidate, poePrefixes map[string]struct{}) (servicedto.PricingSyncMatch, bool) {
 	for _, candidate := range candidates {
 		match, ok := buildPricingSyncMatch(
 			model,
@@ -205,6 +236,7 @@ func buildPricingSyncMatchFromCandidates(model string, candidates []pricingSyncC
 			candidate.matchType,
 			candidate.entry.providerID,
 			candidate.entry.providerName,
+			poePrefixes,
 		)
 		if ok {
 			return match, true
@@ -477,7 +509,7 @@ func normalizePricingModelKey(value string) string {
 	return builder.String()
 }
 
-func buildPricingSyncMatch(model string, metadataModel modelsDevModel, matchType string, providerID string, providerName string) (servicedto.PricingSyncMatch, bool) {
+func buildPricingSyncMatch(model string, metadataModel modelsDevModel, matchType string, providerID string, providerName string, poePrefixes map[string]struct{}) (servicedto.PricingSyncMatch, bool) {
 	if metadataModel.Cost.Input == nil || metadataModel.Cost.Output == nil {
 		return servicedto.PricingSyncMatch{}, false
 	}
@@ -488,20 +520,24 @@ func buildPricingSyncMatch(model string, metadataModel modelsDevModel, matchType
 	}
 
 	pricingStyle := pricingStyleForModelsDevModel(metadataModel)
-	if strings.EqualFold(providerID, "poe") || strings.EqualFold(providerName, "poe") {
+	if strings.EqualFold(providerID, "poe") || strings.EqualFold(providerName, "poe") || cpaModelUsesPoePrefix(model, poePrefixes) {
 		pricingStyle = entities.ModelPricingStylePoe
 	}
 	cacheRead := 0.0
-	if metadataModel.Cost.CacheRead != nil {
-		cacheRead = *metadataModel.Cost.CacheRead
-	}
 	cacheWrite := 0.0
-	// Keeper 当前保存单组基础价格；这里只映射 Models.dev 顶层 cache_write，长上下文 tiers 留待独立价格模型支持。
-	if metadataModel.Cost.CacheWrite != nil {
-		cacheWrite = *metadataModel.Cost.CacheWrite
-	}
-	if cacheRead < 0 || cacheWrite < 0 {
-		return servicedto.PricingSyncMatch{}, false
+	if pricingStyle == entities.ModelPricingStylePoe {
+		cacheRead, cacheWrite = poeCatalogCachePrices(input)
+	} else {
+		if metadataModel.Cost.CacheRead != nil {
+			cacheRead = *metadataModel.Cost.CacheRead
+		}
+		// Keeper 当前保存单组基础价格；这里只映射 Models.dev 顶层 cache_write，长上下文 tiers 留待独立价格模型支持。
+		if metadataModel.Cost.CacheWrite != nil {
+			cacheWrite = *metadataModel.Cost.CacheWrite
+		}
+		if cacheRead < 0 || cacheWrite < 0 {
+			return servicedto.PricingSyncMatch{}, false
+		}
 	}
 
 	matchedModel := strings.TrimSpace(metadataModel.ID)
@@ -524,6 +560,27 @@ func buildPricingSyncMatch(model string, metadataModel modelsDevModel, matchType
 		CacheReadPricePer1M:  cacheRead,
 		CacheWritePricePer1M: cacheWrite,
 	}, true
+}
+
+func poeCatalogCachePrices(promptPricePer1M float64) (cacheRead float64, cacheWrite float64) {
+	return promptPricePer1M * poeCacheReadPayRate, 0
+}
+
+func cpaModelUsesPoePrefix(model string, prefixes map[string]struct{}) bool {
+	if len(prefixes) == 0 {
+		return false
+	}
+	trimmed := strings.TrimSpace(model)
+	index := strings.LastIndexAny(trimmed, "/:")
+	if index <= 0 {
+		return false
+	}
+	prefix := strings.ToLower(strings.TrimSpace(trimmed[:index]))
+	if prefix == "" {
+		return false
+	}
+	_, ok := prefixes[prefix]
+	return ok
 }
 
 func pricingStyleForModelsDevModel(model modelsDevModel) string {

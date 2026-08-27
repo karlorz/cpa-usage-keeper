@@ -16,6 +16,7 @@ import (
 	"cpa-usage-keeper/internal/cpa/dto/models"
 	"cpa-usage-keeper/internal/cpa/dto/response"
 	"cpa-usage-keeper/internal/entities"
+	"cpa-usage-keeper/internal/helper"
 	"cpa-usage-keeper/internal/repository"
 	"cpa-usage-keeper/internal/service"
 	servicedto "cpa-usage-keeper/internal/service/dto"
@@ -609,6 +610,83 @@ func TestBuildPricingSyncPreviewRejectsNegativeOpenAICacheWrite(t *testing.T) {
 	}
 	if len(preview.Matches) != 0 || len(preview.UnmatchedModels) != 1 || preview.UnmatchedModels[0] != "gpt-negative-write" {
 		t.Fatalf("expected negative cache_write candidate to be rejected, got %#v", preview)
+	}
+}
+
+func TestBuildPricingSyncPreviewOverridesModelsDevCacheForPoePrefixedDeepSeekV4Flash(t *testing.T) {
+	transport := http.DefaultTransport
+	http.DefaultTransport = pricingCatalogTransport{body: `{
+		"deepseek": {
+			"id": "deepseek",
+			"name": "DeepSeek",
+			"models": {
+				"deepseek-v4-flash": {
+					"id": "deepseek-v4-flash",
+					"name": "DeepSeek V4 Flash",
+					"family": "deepseek",
+					"cost": {"input": 0.14, "output": 0.28, "cache_read": 0.0028, "cache_write": 1.23}
+				}
+			}
+		}
+	}`}
+	t.Cleanup(func() {
+		http.DefaultTransport = transport
+	})
+
+	db := openPricingServiceTestDatabase(t)
+	if err := db.Create(&entities.UsageIdentity{
+		Name:         "poe-lite-dd",
+		AuthType:     entities.UsageIdentityAuthTypeAIProvider,
+		AuthTypeName: "apikey",
+		Identity:     "poe-lite-dd",
+		Type:         "openai",
+		Provider:     "poe",
+		Prefix:       "dd",
+	}).Error; err != nil {
+		t.Fatalf("seed poe identity: %v", err)
+	}
+
+	pricingService := service.NewPricingService(db, emptyPricingCatalogForTest(), stubModelsFetcher{result: &response.ModelsResult{Payload: models.ModelsResponse{Data: []models.ModelInfo{
+		{ID: "dd/deepseek-v4-flash"},
+	}}}})
+	preview, err := pricingService.PreviewPricingSync(context.Background())
+	if err != nil {
+		t.Fatalf("build pricing sync preview: %v", err)
+	}
+	if len(preview.Matches) != 1 {
+		t.Fatalf("expected one match, got %#v", preview)
+	}
+	match := preview.Matches[0]
+	if match.Model != "dd/deepseek-v4-flash" || match.MatchedModel != "deepseek-v4-flash" {
+		t.Fatalf("unexpected match identity: %#v", match)
+	}
+	if match.PricingStyle != entities.ModelPricingStylePoe {
+		t.Fatalf("expected poe pricing style, got %#v", match)
+	}
+	if match.PromptPricePer1M != 0.14 || match.CompletionPricePer1M != 0.28 {
+		t.Fatalf("expected models.dev prompt/completion, got %#v", match)
+	}
+	if math.Abs(match.CacheReadPricePer1M-0.028) > 1e-12 {
+		t.Fatalf("expected Poe cache-read pay rate 20%% of prompt (0.028), not Models.dev 0.0028, got %#v", match)
+	}
+	if match.CacheWritePricePer1M != 0 {
+		t.Fatalf("expected Poe cache-write 0, got %#v", match)
+	}
+
+	breakdown := helper.CalculateUsageTokenCostBreakdown(helper.UsageTokenCostInput{
+		InputTokens:     114413,
+		OutputTokens:    89,
+		CacheReadTokens: 113152,
+	}, entities.ModelPriceSetting{
+		PricingStyle:         match.PricingStyle,
+		PromptPricePer1M:     match.PromptPricePer1M,
+		CompletionPricePer1M: match.CompletionPricePer1M,
+		CacheReadPricePer1M:  match.CacheReadPricePer1M,
+		CacheWritePricePer1M: match.CacheWritePricePer1M,
+	})
+	const poeReceiptUSD = 0.0034
+	if math.Abs(breakdown.TotalCostUSD-poeReceiptUSD) > 0.00005 {
+		t.Fatalf("expected reconstructed USD to match Poe receipt $0.0034 ±5e-5, got %.8f", breakdown.TotalCostUSD)
 	}
 }
 
