@@ -22,6 +22,7 @@ import { useScrollBoundaryContainment } from '@/hooks/useScrollBoundaryContainme
 import {
   calculateCacheReadRate,
   formatDurationMs,
+  formatPricingStyleDetailLabel,
   formatUsd,
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
@@ -475,13 +476,7 @@ export function RequestEventsDetailsCard({
       // 费用由后端按当前价格配置运行时计算，前端只负责展示可用/不可用状态。
       const costAvailable = event.cost_available === true;
       const cost = costAvailable ? Math.max(toNumber(event.cost_usd), 0) : null;
-      const pricingStyle = event.pricing_style === 'claude'
-        ? t('usage_stats.credentials_detail_pricing_style_claude')
-        : event.pricing_style === 'poe'
-          ? t('usage_stats.credentials_detail_pricing_style_poe')
-          : event.pricing_style === 'openai'
-            ? t('usage_stats.credentials_detail_pricing_style_openai')
-            : '-';
+      const pricingStyle = formatPricingStyleDetailLabel(event.pricing_style, t);
 
       return {
         event,

@@ -9,6 +9,7 @@ import { IconCheck, IconCircleAlert, IconRefreshCw } from '@/components/ui/icons
 import { useScrollBoundaryContainment } from '@/hooks/useScrollBoundaryContainment';
 import { ApiError } from '@/lib/api';
 import type { ModelPrice, PricingRule, PricingSaveResult, PricingStyle, PricingSyncMatch, PricingSyncPreviewResponse, ReplacePricingRuleInput } from '@/lib/types';
+import { normalizePricingStyle, formatPricingStyleLabel } from '@/utils/usage';
 import { PriceRulesModal } from './pricing/PriceRulesModal';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -96,11 +97,6 @@ const parseOptionalCachePriceValue = (value: string): number | null => (
 const priceToInputValue = (value: number | undefined): string => (
   typeof value === 'number' && Number.isFinite(value) ? value.toString() : ''
 );
-
-const normalizePricingStyle = (style: PricingStyle | string | undefined): PricingStyle => {
-  if (style === 'openai' || style === 'claude' || style === 'poe') return style;
-  return 'openai';
-};
 
 export const syncMatchToDraft = (match: PricingSyncMatch, existingPrice?: ModelPrice): PricingSyncDraft => ({
   model: match.model,
@@ -675,7 +671,7 @@ export function PriceSettingsCard({
                           <span className={styles.priceModel}>{formatDisplayName(model)}</span>
                           <div className={styles.priceMeta}>
                             <span>
-                              {t('usage_stats.model_price_style')}: {t(price.style === 'claude' ? 'usage_stats.model_price_style_claude' : price.style === 'poe' ? 'usage_stats.model_price_style_poe' : 'usage_stats.model_price_style_openai')}
+                              {t('usage_stats.model_price_style')}: {formatPricingStyleLabel(price.style, t)}
                             </span>
                             <span>
                               {t('usage_stats.model_price_prompt')}: ${price.prompt.toFixed(4)}/1M

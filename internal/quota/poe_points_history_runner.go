@@ -17,6 +17,16 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+var poePointsHistoryParsedURL = mustParsePoePointsHistoryURL(poePointsHistoryBaseURL)
+
+func mustParsePoePointsHistoryURL(raw string) *url.URL {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return &url.URL{Scheme: "https", Host: "api.poe.com", Path: "/usage/points_history"}
+	}
+	return parsed
+}
+
 const (
 	// poePointsHistoryDefaultPollInterval is the default polling interval between points_history scans.
 	poePointsHistoryDefaultPollInterval = 60 * time.Second
@@ -166,11 +176,13 @@ func (s *Service) pollPoePointsHistoryForIdentity(identity entities.UsageIdentit
 		}
 
 		now := timeutil.NormalizeStorageTime(time.Now())
+		queryIDs := make([]string, 0, len(payload.Data))
 		records := make([]entities.PoePointsHistory, 0, len(payload.Data))
 		for _, item := range payload.Data {
 			if strings.TrimSpace(item.QueryID) == "" {
 				continue
 			}
+			queryIDs = append(queryIDs, item.QueryID)
 			observedAt := now
 			if item.CreationTime != nil && *item.CreationTime > 0 {
 				// Poe returns creation_time in microseconds or seconds; if > 1e11 treat as micros
@@ -194,6 +206,16 @@ func (s *Service) pollPoePointsHistoryForIdentity(identity entities.UsageIdentit
 			})
 		}
 
+		existingIDs := map[string]struct{}{}
+		if len(queryIDs) > 0 && s.db != nil {
+			lookupCtx, lookupCancel := context.WithTimeout(context.Background(), poePointsHistoryDatabaseTimeout)
+			existingIDs, err = existingPoePointsHistoryQueryIDs(lookupCtx, s.db, queryIDs)
+			lookupCancel()
+			if err != nil {
+				return fmt.Errorf("looking up existing poe points history: %w", err)
+			}
+		}
+
 		if len(records) > 0 {
 			writeCtx, writeCancel := context.WithTimeout(context.Background(), poePointsHistoryDatabaseTimeout)
 			err := s.poePointsHistoryWrite(writeCtx, s.db, records)
@@ -204,7 +226,7 @@ func (s *Service) pollPoePointsHistoryForIdentity(identity entities.UsageIdentit
 		}
 
 		pagesFetched++
-		if !payload.HasMore || pagesFetched >= maxPagesPerPoll {
+		if len(existingIDs) > 0 || !payload.HasMore || pagesFetched >= maxPagesPerPoll {
 			break
 		}
 
@@ -225,12 +247,25 @@ func (s *Service) pollPoePointsHistoryForIdentity(identity entities.UsageIdentit
 	return nil
 }
 
-func (s *Service) buildPoePointsHistoryURL(limit int, startingAfter string) string {
-	baseURL := poePointsHistoryBaseURL
-	parsed, err := url.Parse(baseURL)
-	if err != nil {
-		return baseURL
+func existingPoePointsHistoryQueryIDs(ctx context.Context, db *gorm.DB, queryIDs []string) (map[string]struct{}, error) {
+	found := make(map[string]struct{}, len(queryIDs))
+	if db == nil || len(queryIDs) == 0 {
+		return found, nil
 	}
+	var existing []string
+	if err := db.WithContext(ctx).Model(&entities.PoePointsHistory{}).
+		Where("query_id IN ?", queryIDs).
+		Pluck("query_id", &existing).Error; err != nil {
+		return nil, err
+	}
+	for _, id := range existing {
+		found[id] = struct{}{}
+	}
+	return found, nil
+}
+
+func (s *Service) buildPoePointsHistoryURL(limit int, startingAfter string) string {
+	parsed := *poePointsHistoryParsedURL
 	query := parsed.Query()
 	if limit > 0 {
 		query.Set("limit", strconv.Itoa(limit))

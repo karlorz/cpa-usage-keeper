@@ -15,7 +15,7 @@ import { PortalTooltip, usePortalTooltip } from '@/components/ui/PortalTooltip'
 import { IconChevronDown, IconChevronRight } from '@/components/ui/icons'
 import { useScrollBoundaryContainment } from '@/hooks/useScrollBoundaryContainment'
 import type { UsageEvent } from '@/lib/types'
-import { calculateCacheReadRate, formatDurationMs, formatUsd } from '@/utils/usage'
+import { calculateCacheReadRate, formatDurationMs, formatPricingStyleDetailLabel, formatUsd } from '@/utils/usage'
 import { RequestEventResultBadge } from '@/components/usage/RequestEventResultBadge'
 import styles from './CredentialRequestEventsList.module.scss'
 
@@ -225,13 +225,7 @@ const buildRow = (
   const clientIP = optionalText(event.client_ip)
   const xForwardedFor = optionalText(event.x_forwarded_for)
   const userAgent = optionalText(event.user_agent)
-  const pricingStyle = event.pricing_style === 'claude'
-    ? t('usage_stats.credentials_detail_pricing_style_claude')
-    : event.pricing_style === 'poe'
-      ? t('usage_stats.credentials_detail_pricing_style_poe')
-      : event.pricing_style === 'openai'
-        ? t('usage_stats.credentials_detail_pricing_style_openai')
-        : '-'
+  const pricingStyle = formatPricingStyleDetailLabel(event.pricing_style, t)
   const timestampLabels = formatTimestamp(timestamp)
 
   return {

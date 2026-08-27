@@ -75,10 +75,19 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 		entry.USDSpent += costUSD
 	}
 
-	// 2. Load compute points and USD from poe_points_history
-	var poeRows []entities.PoePointsHistory
+	// 2. Load compute points and USD from poe_points_history, grouped in SQL.
+	type poeSpendAggregate struct {
+		AuthIndex   string  `gorm:"column:auth_index"`
+		Model       string  `gorm:"column:bot_name"`
+		Date        string  `gorm:"column:date"`
+		PointsSpent float64 `gorm:"column:points_spent"`
+		USDSpent    float64 `gorm:"column:usd_spent"`
+	}
+	var poeRows []poeSpendAggregate
 	poeQuery := db.WithContext(ctx).Model(&entities.PoePointsHistory{}).
-		Where("observed_at >= ? AND observed_at < ?", timeutil.FormatStorageTime(windowStart), timeutil.FormatStorageTime(windowEnd))
+		Select("auth_index, bot_name, substr(observed_at, 1, 10) as date, COALESCE(SUM(cost_points), 0) as points_spent, COALESCE(SUM(cost_usd), 0) as usd_spent").
+		Where("observed_at >= ? AND observed_at < ?", timeutil.FormatStorageTime(windowStart), timeutil.FormatStorageTime(windowEnd)).
+		Group("auth_index, bot_name, substr(observed_at, 1, 10)")
 
 	if authIndex := strings.TrimSpace(filter.AuthIndex); authIndex != "" {
 		poeQuery = poeQuery.Where("auth_index = ?", authIndex)
@@ -87,24 +96,14 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 		poeQuery = poeQuery.Where("bot_name = ?", model)
 	}
 
-	if err := poeQuery.Find(&poeRows).Error; err != nil {
+	if err := poeQuery.Scan(&poeRows).Error; err != nil {
 		return nil, fmt.Errorf("load poe points history for spend dashboard: %w", err)
 	}
 
 	for _, p := range poeRows {
 		authIndex := strings.TrimSpace(p.AuthIndex)
-		model := strings.TrimSpace(p.BotName)
-		date := timeutil.NormalizeStorageTime(p.ObservedAt).Format(time.DateOnly)
-
-		var points float64
-		if p.CostPoints != nil {
-			points = *p.CostPoints
-		}
-		var usd float64
-		if p.CostUSD != nil {
-			usd = *p.CostUSD
-		}
-
+		model := strings.TrimSpace(p.Model)
+		date := strings.TrimSpace(p.Date)
 		key := spendDashboardKey{
 			authIndex: authIndex,
 			model:     model,
@@ -120,10 +119,10 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 			}
 			aggMap[key] = entry
 		}
-		entry.PointsSpent += points
-		// If USD was not tracked from usage events, accumulate poe history cost_usd
-		if entry.USDSpent == 0 && usd > 0 {
-			entry.USDSpent += usd
+		entry.PointsSpent += p.PointsSpent
+		// If USD was not tracked from usage events, use Poe-reported USD.
+		if entry.USDSpent == 0 && p.USDSpent > 0 {
+			entry.USDSpent += p.USDSpent
 		}
 	}
 

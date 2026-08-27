@@ -17,6 +17,7 @@ import { CredentialHealthPanel } from './CredentialHealthPanel'
 import { CredentialSubscriptionBadge } from './CredentialSubscriptionBadge'
 import { CredentialPriorityBadge, CredentialRowShell, CredentialSectionShell, CredentialTableHeader, CredentialsPagination, MetricPill, RequestMetric, TonePercent, cacheReadRateTone, capitalize, credentialToneClassName, formatCredentialNumber, successRateTone } from './CredentialSectionShell'
 import { ProviderBrandIcon } from '@/components/ProviderBrandIcon'
+import { formatPoePoints } from '@/utils/usage'
 
 type Translate = (key: string, options?: Record<string, string>) => string
 type InspectionIndicatorTone = 'idle' | 'running' | 'completed'
@@ -1929,12 +1930,6 @@ function PoeQuotaMetric({ quota }: { quota: DisplayQuota }) {
       {quota.remaining !== undefined && <strong className={styles.credentialPoeMetricValue}>{formatPoePoints(quota.remaining)}</strong>}
     </div>
   )
-}
-
-const poePointsFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
-
-function formatPoePoints(value: number): string {
-  return poePointsFormatter.format(value)
 }
 
 function QuotaBar({ quota, quotaUsageMode }: { quota: DisplayQuota; quotaUsageMode: QuotaUsageMode }) {

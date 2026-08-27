@@ -54,7 +54,7 @@ func TestPoePointsHistoryMigrationCreatesTableColumnsAndIndexes(t *testing.T) {
 
 	// Verify indexes
 	assertPoePointsHistoryIndexNames(t, db, "poe_points_history", []string{
-		"idx_poe_points_history_auth_index",
+		"idx_poe_points_history_auth_index_observed_at",
 		"idx_poe_points_history_bot_name",
 		"idx_poe_points_history_observed_at",
 	})

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError, deletePricing, fetchPricing, fetchPricingRules, fetchPricingSyncPreview, fetchUsedModels, replacePricingRules, updatePricing, updatePricingBatch } from '@/lib/api';
-import type { ModelPrice, PricingEntry, PricingRule, PricingSaveResult, PricingStyle, PricingSyncPreviewResponse, ReplacePricingRuleInput } from '@/lib/types';
+import type { ModelPrice, PricingEntry, PricingRule, PricingSaveResult, PricingSyncPreviewResponse, ReplacePricingRuleInput } from '@/lib/types';
 import { useNotificationStore } from '@/stores';
+import { normalizePricingStyle } from '@/utils/usage';
 
 export interface UsePricingDataOptions {
   onAuthRequired?: () => void;
@@ -22,11 +23,6 @@ export interface UsePricingDataReturn {
   syncModelPrices: (prices: Record<string, ModelPrice>) => Promise<PricingSaveResult>;
   previewPricingSync: () => Promise<PricingSyncPreviewResponse>;
 }
-
-const normalizePricingStyle = (style: PricingStyle | string | undefined): PricingStyle => {
-  if (style === 'openai' || style === 'claude' || style === 'poe') return style;
-  return 'openai';
-};
 
 export const pricingToModelPrice = (entry: PricingEntry): ModelPrice => ({
   style: normalizePricingStyle(entry.pricing_style),

@@ -23,7 +23,7 @@ type spendDashboardRowResponse struct {
 	PointsSpent float64 `json:"points_spent"`
 }
 
-func registerUsageSpendRoute(router gin.IRoutes, usageProvider service.UsageProvider, cpaAPIKeyProvider service.CPAAPIKeyProvider) {
+func registerUsageSpendRoute(router gin.IRoutes, usageProvider service.UsageProvider) {
 	router.GET("/usage/spend", func(c *gin.Context) {
 		if usageProvider == nil {
 			c.JSON(http.StatusOK, spendDashboardResponse{Rows: []spendDashboardRowResponse{}})

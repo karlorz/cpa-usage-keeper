@@ -1,4 +1,4 @@
-import type { UsageFilterWindow, UsageTimeRange } from '@/lib/types';
+import type { PricingStyle, UsageFilterWindow, UsageTimeRange } from '@/lib/types';
 import type { UsagePayload } from '@/components/usage/hooks/useUsageData';
 import { parseSelectableUsageRange, resolveUsageRequestRange } from '@/utils/usage/rangeQuery';
 import {
@@ -107,6 +107,24 @@ const poePointsFormatter = new Intl.NumberFormat(undefined, { maximumFractionDig
 
 export function formatPoePoints(value: number): string {
   return poePointsFormatter.format(value || 0);
+}
+
+export function normalizePricingStyle(style: PricingStyle | string | undefined): PricingStyle {
+  if (style === 'openai' || style === 'claude' || style === 'poe') return style;
+  return 'openai';
+}
+
+export function formatPricingStyleLabel(style: PricingStyle | string | undefined, t: (key: string) => string): string {
+  if (style === 'claude') return t('usage_stats.model_price_style_claude');
+  if (style === 'poe') return t('usage_stats.model_price_style_poe');
+  return t('usage_stats.model_price_style_openai');
+}
+
+export function formatPricingStyleDetailLabel(style: PricingStyle | string | undefined, t: (key: string) => string): string {
+  if (style === 'claude') return t('usage_stats.credentials_detail_pricing_style_claude');
+  if (style === 'poe') return t('usage_stats.credentials_detail_pricing_style_poe');
+  if (style === 'openai') return t('usage_stats.credentials_detail_pricing_style_openai');
+  return '-';
 }
 
 export function normalizeAuthIndex(value: unknown): string {
