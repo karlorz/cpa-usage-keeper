@@ -1881,16 +1881,18 @@ export function PoePoeQuotaPanel({ row }: { row: { quotaLoading: boolean; quotaE
 
   return (
     <div className={styles.credentialQuotaPanel}>
-      {barQuotas.length > 0 && (
-        <div className={styles.credentialQuotaBars}>
-          {barQuotas.map((quota) => <QuotaBar key={quota.key} quota={quota} quotaUsageMode="current" />)}
-        </div>
-      )}
-      {numberQuotas.length > 0 && (
-        <div className={`${styles.credentialPoeQuotaGrid} ${styles.credentialPoeQuotaBarGrid}`.trim()}>
-          {numberQuotas.map((quota) => <PoeQuotaMetric key={quota.key} quota={quota} />)}
-        </div>
-      )}
+      <div className={barQuotas.length > 0 && numberQuotas.length > 0 ? styles.credentialPoeQuotaCombinedRow : styles.credentialQuotaBars}>
+        {barQuotas.length > 0 && (
+          <div className={styles.credentialPoeQuotaBarColumn}>
+            {barQuotas.map((quota) => <QuotaBar key={quota.key} quota={quota} quotaUsageMode="current" />)}
+          </div>
+        )}
+        {numberQuotas.length > 0 && (
+          <div className={`${styles.credentialPoeQuotaGrid} ${styles.credentialPoeQuotaBarGrid}`.trim()}>
+            {numberQuotas.map((quota) => <PoeQuotaMetric key={quota.key} quota={quota} />)}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
