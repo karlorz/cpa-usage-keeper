@@ -87,6 +87,8 @@ const (
 	migrationRebuildQuotaHistory = "20260822_rebuild_quota_history"
 	// migrationAddAuthSessionAlias 保存单个管理员会话的可选辨识名称。
 	migrationAddAuthSessionAlias = "20260824_add_auth_session_alias"
+	// migrationPoePointsHistory 创建 Poe compute-point spend 历史表。
+	migrationPoePointsHistory = "20260827_poe_points_history"
 )
 
 type schemaMigration struct {
@@ -211,6 +213,7 @@ func orderedMigrations() []databaseMigration {
 		// 破坏性清空与通用表创建必须和版本标记处于同一个默认事务。
 		{version: migrationRebuildQuotaHistory, run: rebuildQuotaHistoryMigration},
 		{version: migrationAddAuthSessionAlias, run: addAuthSessionAliasMigration},
+		{version: migrationPoePointsHistory, run: createPoePointsHistoryMigration},
 	}
 }
 

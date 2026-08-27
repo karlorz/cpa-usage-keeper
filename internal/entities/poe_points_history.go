@@ -1,0 +1,21 @@
+package entities
+
+import "time"
+
+// PoePointsHistory stores Poe compute-point spend per query, polled from Poe's usage API.
+// query_id is Poe's identifier (NOT CPA's request_id) — join by identity + model + time.
+type PoePointsHistory struct {
+	QueryID               string    `gorm:"primaryKey;column:query_id"`
+	AuthIndex             string    `gorm:"column:auth_index;index"`
+	BotName               string    `gorm:"column:bot_name;index"`
+	CostPoints            *float64  `gorm:"column:cost_points"`
+	CostUSD               *float64  `gorm:"column:cost_usd"`
+	CostBreakdownInPoints *float64  `gorm:"column:cost_breakdown_in_points"`
+	ObservedAt            time.Time `gorm:"column:observed_at;index"`
+	FirstSeenAt           time.Time `gorm:"column:first_seen_at"`
+	LastSeenAt            time.Time `gorm:"column:last_seen_at"`
+}
+
+func (PoePointsHistory) TableName() string {
+	return "poe_points_history"
+}
