@@ -1,5 +1,5 @@
 import type { UsageCredentialHealth, UsageIdentity, UsageQuotaCheckResponse, UsageQuotaRow } from '@/lib/types'
-import { calculateCacheReadRate, formatCompactTokenValue } from '@/utils/usage'
+import { calculateCacheReadRate, formatCompactNumber, formatCompactTokenValue } from '@/utils/usage'
 import { resolveCredentialSubscriptionBadge, type SubscriptionBadgeModel } from './credentialSubscription'
 
 export const CREDENTIALS_PAGE_SIZE = 10
@@ -278,20 +278,33 @@ function toDisplayQuota(row: UsageQuotaRow): DisplayQuota | undefined {
 }
 
 function quotaBillingUsage(row: UsageQuotaRow): QuotaBillingUsageDisplay | undefined {
-  if (row.metric !== 'usd_cents') {
-    return undefined
+  if (row.metric === 'usd_cents') {
+    const used = finiteNumber(row.used)
+    const limit = finiteNumber(row.limit)
+    const remaining = finiteNumber(row.remaining)
+    if (used === undefined && limit === undefined && remaining === undefined) {
+      return undefined
+    }
+    return {
+      used: used === undefined ? undefined : formatUSDCents(used),
+      limit: limit === undefined ? undefined : formatUSDCents(limit),
+      remaining: remaining === undefined ? undefined : formatUSDCents(remaining),
+    }
   }
-  const used = finiteNumber(row.used)
-  const limit = finiteNumber(row.limit)
-  const remaining = finiteNumber(row.remaining)
-  if (used === undefined && limit === undefined && remaining === undefined) {
-    return undefined
+
+  // Poe 月度点数额度条：metric 为 points 且存在 limit 时，将 remaining / limit 格式化为点数使用量文本（如 11.08M / 12.50M）。
+  if (row.metric === 'points' && row.limit !== undefined && row.limit > 0) {
+    const remaining = finiteNumber(row.remaining)
+    const limit = finiteNumber(row.limit)
+    if (remaining !== undefined && limit !== undefined) {
+      return {
+        remaining: formatCompactNumber(remaining),
+        limit: formatCompactNumber(limit),
+      }
+    }
   }
-  return {
-    used: used === undefined ? undefined : formatUSDCents(used),
-    limit: limit === undefined ? undefined : formatUSDCents(limit),
-    remaining: remaining === undefined ? undefined : formatUSDCents(remaining),
-  }
+
+  return undefined
 }
 
 function formatUSDCents(cents: number): string {

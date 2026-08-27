@@ -1997,6 +1997,9 @@ function formatQuotaBillingUsageText(billingUsage: NonNullable<DisplayQuota['bil
   if (billingUsage.used && billingUsage.limit) {
     return `${billingUsage.used} / ${billingUsage.limit}`
   }
+  if (billingUsage.remaining && billingUsage.limit) {
+    return `${billingUsage.remaining} / ${billingUsage.limit}`
+  }
   return billingUsage.used ?? billingUsage.remaining ?? billingUsage.limit ?? ''
 }
 

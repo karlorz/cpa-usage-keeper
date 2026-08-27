@@ -639,6 +639,10 @@ describe('credentialViewModels', () => {
     expect(monthlyRow?.barPercent).toBe(20)
     expect(monthlyRow?.percentKind).toBe('remaining')
     expect(monthlyRow?.status).toBe('warning')
+    expect(monthlyRow?.billingUsage).toEqual({
+      remaining: '2.50K',
+      limit: '12.50K',
+    })
   })
 
   it('keeps non-poe AI provider rows free of quota display data', () => {
