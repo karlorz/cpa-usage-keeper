@@ -606,7 +606,7 @@ describe('credentialViewModels', () => {
       identity({ auth_type: 1, identity: 'auth-active' }),
     ]
 
-    expect(selectPoeQuotaEligibleAuthIndexes(identities)).toEqual(['poe-active', 'poe-lite-dd'])
+    expect(selectPoeQuotaEligibleAuthIndexes(identities)).toEqual(['poe-active'])
   })
 
   it('builds poe AI provider rows with number-forward quota display', () => {

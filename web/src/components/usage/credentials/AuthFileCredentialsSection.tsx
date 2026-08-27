@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { MainActionButton } from '@/components/ui/MainActionButton'
 import { Modal } from '@/components/ui/Modal'
@@ -1609,7 +1610,23 @@ function isAuthFileDisplayMode(value: string | null | undefined): value is AuthF
 export function AuthFileQuotaPanel({ row, quotaUsageMode }: { row: AuthFileCredentialRow; quotaUsageMode: QuotaUsageMode }) {
   const { t } = useTranslation()
 
-  // 限额区域按加载、错误、刷新中、无缓存、可展示数据的顺序降级。
+  const stateSlot = renderQuotaStateSlot(row, t)
+  if (stateSlot) {
+    return stateSlot
+  }
+
+  return (
+    <div className={styles.credentialQuotaPanel}>
+      <div className={styles.credentialQuotaBars}>
+        {/* 每个可计算进度的 quota 都独占一个稳定块；不可进度化 quota 在 view model 中已过滤。 */}
+        {row.displayQuotas.map((quota) => <QuotaBar key={quota.key} quota={quota} quotaUsageMode={quotaUsageMode} />)}
+      </div>
+    </div>
+  )
+}
+
+// renderQuotaStateSlot 提取加载/错误/刷新中/无缓存的降级渲染，供 AuthFile 和 Poe quota panel 共用。
+function renderQuotaStateSlot(row: { quotaLoading: boolean; quotaError?: string; refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'; displayQuotas: DisplayQuota[] }, t: TFunction): ReactElement | null {
   if (row.quotaLoading) {
     return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_loading')}</div></div>
   }
@@ -1630,15 +1647,7 @@ export function AuthFileQuotaPanel({ row, quotaUsageMode }: { row: AuthFileCrede
   if (row.displayQuotas.length === 0) {
     return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_unavailable')}</div></div>
   }
-
-  return (
-    <div className={styles.credentialQuotaPanel}>
-      <div className={styles.credentialQuotaBars}>
-        {/* 每个可计算进度的 quota 都独占一个稳定块；不可进度化 quota 在 view model 中已过滤。 */}
-        {row.displayQuotas.map((quota) => <QuotaBar key={quota.key} quota={quota} quotaUsageMode={quotaUsageMode} />)}
-      </div>
-    </div>
-  )
+  return null
 }
 
 export function formatQuotaErrorDisplay(error: string | undefined): QuotaErrorDisplay {
@@ -1851,29 +1860,13 @@ export function formatQuotaBillingUsageAriaLabel(t: Translate, billingUsage: Non
   })
 }
 
-// PoePoeQuotaPanel 展示 Poe compute-points 余额与授予计划：余额类走 OAuth 风格的进度条，授予行保留 number-forward。
-export function PoePoeQuotaPanel({ row }: { row: { quotaLoading: boolean; quotaError?: string; refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'; displayQuotas: DisplayQuota[] } }) {
+// PoeQuotaPanel 展示 Poe compute-points 余额与授予计划：余额类走 OAuth 风格的进度条，授予行保留 number-forward。
+export function PoeQuotaPanel({ row }: { row: { quotaLoading: boolean; quotaError?: string; refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'; displayQuotas: DisplayQuota[] } }) {
   const { t } = useTranslation()
 
-  if (row.quotaLoading) {
-    return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_loading')}</div></div>
-  }
-  if (row.quotaError) {
-    const errorDisplay = formatQuotaErrorDisplay(row.quotaError)
-    return (
-      <div className={styles.credentialQuotaStateSlot}>
-        <div className={styles.credentialQuotaErrorSummary} title={errorDisplay.title}>
-          {errorDisplay.code && <span className={styles.credentialQuotaErrorCode}>{errorDisplay.code}</span>}
-          <span className={styles.credentialQuotaErrorMessage}>{errorDisplay.message}</span>
-        </div>
-      </div>
-    )
-  }
-  if (row.refreshStatus === 'queued' || row.refreshStatus === 'running') {
-    return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaRefreshStatus}>{t(`usage_stats.credentials_refresh_status_${row.refreshStatus}`)}</div></div>
-  }
-  if (row.displayQuotas.length === 0) {
-    return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_unavailable')}</div></div>
+  const stateSlot = renderQuotaStateSlot(row, t)
+  if (stateSlot) {
+    return stateSlot
   }
 
   const barQuotas = row.displayQuotas.filter((quota) => quota.barPercent !== null)
@@ -1919,8 +1912,10 @@ function PoeQuotaMetric({ quota }: { quota: DisplayQuota }) {
   )
 }
 
+const poePointsFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
+
 function formatPoePoints(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
+  return poePointsFormatter.format(value)
 }
 
 function QuotaBar({ quota, quotaUsageMode }: { quota: DisplayQuota; quotaUsageMode: QuotaUsageMode }) {

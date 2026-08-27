@@ -129,15 +129,15 @@ export function selectQuotaEligibleAuthIndexes(identities: UsageIdentity[]): str
     .map((identity) => identity.identity)
 }
 
-// selectPoeQuotaEligibleAuthIndexes 只挑选当前页启用、未删除且 provider 以 poe 开头的 AI Provider 身份，
-// 用于行内 quota 缓存与刷新。后端 validateRefreshAuthIndex 对 provider 精确匹配 poe，这里保持一致。
+// selectPoeQuotaEligibleAuthIndexes 只挑选当前页启用、未删除且 provider 精确为 poe 的 AI Provider 身份，
+// 用于行内 quota 缓存与刷新。与后端 validateRefreshAuthIndex 口径一致。
 export function selectPoeQuotaEligibleAuthIndexes(identities: UsageIdentity[]): string[] {
   return identities
     .filter((identity) => (
       identity.auth_type === 2
       && !identity.is_deleted
       && !identity.disabled
-      && identity.provider?.trim().toLowerCase().startsWith('poe')
+      && isPoeProviderIdentity(identity)
     ))
     .map((identity) => identity.identity)
 }
@@ -500,7 +500,7 @@ function isDisplayableQuota(quota: DisplayQuota | undefined): quota is DisplayQu
 
 // isDisplayableQuotaOrPoe 对 Poe number-forward 行放行（无水位条，仅展示数值与授予计划）。
 function isDisplayableQuotaOrPoe(quota: DisplayQuota | undefined): quota is DisplayQuota {
-  return quota !== undefined && (quota.barPercent !== null || quota.scope === 'billing' || quota.key === 'next_monthly_grant')
+  return quota !== undefined && (quota.barPercent !== null || quota.scope === 'billing')
 }
 
 function credentialDisplayName(identity: UsageIdentity): string {

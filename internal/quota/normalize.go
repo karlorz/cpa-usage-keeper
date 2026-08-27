@@ -749,7 +749,7 @@ func poeUSDToCents(value *float64) *float64 {
 
 // poeUnixMicrosToTime 把 Poe Usage API 的微秒时间戳转成项目存储时间。
 func poeUnixMicrosToTime(micros int64) time.Time {
-	return time.Unix(0, micros*1000)
+	return time.UnixMicro(micros)
 }
 
 func floatPtr(value float64) *float64 {

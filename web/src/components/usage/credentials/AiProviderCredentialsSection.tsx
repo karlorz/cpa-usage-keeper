@@ -5,7 +5,7 @@ import type { UsageIdentityPageSort } from '@/lib/api'
 import { CredentialAliasEditor, isCredentialAliasEditorDisabled } from './CredentialAliasEditor'
 import { CredentialHealthPanel } from './CredentialHealthPanel'
 import { CredentialPriorityBadge, CredentialRowShell, CredentialSectionShell, CredentialTableHeader, CredentialsPagination, MetricPill, RequestMetric, TonePercent, cacheReadRateTone, formatCredentialNumber, successRateTone } from './CredentialSectionShell'
-import { PoePoeQuotaPanel } from './AuthFileCredentialsSection'
+import { PoeQuotaPanel } from './AuthFileCredentialsSection'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { IconRefreshCw } from '@/components/ui/icons'
 import { ProviderBrandIcon } from '@/components/ProviderBrandIcon'
@@ -119,7 +119,7 @@ export function AiProviderCredentialsSection({ rows, total, page, totalPages, pa
           )}
           side={row.hasPoeQuota ? (
             <div className={styles.credentialQuotaSideWithAction}>
-              <PoePoeQuotaPanel row={row} />
+              <PoeQuotaPanel row={row} />
               <div className={styles.credentialQuotaActionStack}>
                 <button
                   type="button"

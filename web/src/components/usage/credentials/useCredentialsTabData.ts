@@ -86,14 +86,18 @@ export function useCredentialsTabData({ enabledAuthFiles, enabledAiProviders, on
     () => selectPoeQuotaEligibleAuthIndexes(credentialPages.aiProviderIdentities),
     [credentialPages.aiProviderIdentities],
   )
+  const combinedAuthIndexes = useMemo(
+    () => [...currentAuthIndexes, ...currentPoeAuthIndexes],
+    [currentAuthIndexes, currentPoeAuthIndexes],
+  )
   const { quotaResponseByAuthIndex, cachedQuotaStateByAuthIndex, setQuotaResponseByAuthIndex, refreshQuotaCache } = useQuotaCache({
     enabled: enabledAuthFiles || enabledAiProviders,
-    authIndexes: [...currentAuthIndexes, ...currentPoeAuthIndexes],
+    authIndexes: combinedAuthIndexes,
     onAuthRequired,
   })
   const quotaRefreshTasks = useQuotaRefreshTasks({
     enabled: enabledAuthFiles || enabledAiProviders,
-    currentAuthIndexes: [...currentAuthIndexes, ...currentPoeAuthIndexes],
+    currentAuthIndexes: combinedAuthIndexes,
     setQuotaResponseByAuthIndex,
     onAuthRequired,
   })
