@@ -24,7 +24,10 @@ type ServiceOptions struct {
 	CodexQuotaHistoryFlushInterval time.Duration
 	// CodexQuotaHistoryQueueSize 分别覆盖 Header 与可信主动查询两条有界队列容量，非正值使用生产默认值。
 	CodexQuotaHistoryQueueSize int
-	PricingCatalog             *pricing.Catalog
+	// PoePointsHistoryPollInterval 覆盖 Poe points_history 轮询间隔，主要供定向测试缩短等待。
+	PoePointsHistoryPollInterval time.Duration
+	Caller                       ManagementAPICaller
+	PricingCatalog               *pricing.Catalog
 }
 
 type Service struct {
@@ -105,6 +108,30 @@ type Service struct {
 	codexQuotaHistoryClosing bool
 	// codexQuotaHistoryCloseOnce 保证重复 StopRefreshTasks 只关闭一次 stop channel。
 	codexQuotaHistoryCloseOnce sync.Once
+
+	// caller 用于 Poe points_history 独立 runner 调用管理 API。
+	caller ManagementAPICaller
+
+	// poePointsHistoryWake 只通知 runner“立即执行一轮 points_history 轮询”。
+	poePointsHistoryWake chan struct{}
+	// poePointsHistoryStopCh 只表达 runner 停止。
+	poePointsHistoryStopCh chan struct{}
+	// poePointsHistoryDoneCh 在 runner 退出后关闭。
+	poePointsHistoryDoneCh chan struct{}
+	// poePointsHistoryPollInterval 是 points_history 轮询间隔。
+	poePointsHistoryPollInterval time.Duration
+	// poePointsHistoryNewTimer 创建一次性轮询 timer。
+	poePointsHistoryNewTimer func(time.Duration) (<-chan time.Time, func())
+	// poePointsHistoryWrite 是独立 points_history repository writer。
+	poePointsHistoryWrite poePointsHistoryWriter
+	// poePointsHistoryListIdentities 批量查询活跃 Poe 身份。
+	poePointsHistoryListIdentities poePointsHistoryIdentityLister
+	// poePointsHistoryMu 保护 closing 状态。
+	poePointsHistoryMu sync.Mutex
+	// poePointsHistoryClosing 表示 runner 正在关闭。
+	poePointsHistoryClosing bool
+	// poePointsHistoryCloseOnce 保证重复 StopRefreshTasks 只关闭一次 stop channel。
+	poePointsHistoryCloseOnce sync.Once
 }
 
 type CheckRequest struct {
@@ -125,6 +152,7 @@ func NewService(db *gorm.DB, caller ManagementAPICaller, pricingCatalog *pricing
 }
 
 func NewServiceWithOptions(db *gorm.DB, caller ManagementAPICaller, options ServiceOptions) *Service {
+	options.Caller = caller
 	return NewServiceWithRegistryAndOptions(db, NewDefaultProviderRegistry(caller, DefaultProviderConfigs()), options)
 }
 
@@ -154,6 +182,10 @@ func NewServiceWithRegistryAndOptions(db *gorm.DB, registry ProviderRegistry, op
 	if codexHistoryQueueSize <= 0 {
 		codexHistoryQueueSize = codexQuotaHistoryQueueSize
 	}
+	poePollInterval := options.PoePointsHistoryPollInterval
+	if poePollInterval <= 0 {
+		poePollInterval = poePointsHistoryDefaultPollInterval
+	}
 	refreshContext, refreshCancel := context.WithCancel(context.Background())
 	pricingCatalog := options.PricingCatalog
 	if pricingCatalog == nil {
@@ -163,6 +195,7 @@ func NewServiceWithRegistryAndOptions(db *gorm.DB, registry ProviderRegistry, op
 		db:                              db,
 		registry:                        registry,
 		pricing:                         pricingCatalog,
+		caller:                          options.Caller,
 		refreshTasks:                    make(map[string]*RefreshTaskRecord),
 		resetInFlight:                   make(map[string]struct{}),
 		refreshWorkerTokens:             make(chan struct{}, workerLimit),
@@ -188,10 +221,18 @@ func NewServiceWithRegistryAndOptions(db *gorm.DB, registry ProviderRegistry, op
 		codexQuotaHistoryWrite:          repository.WriteCodexMainQuotaObservations,
 		codexQuotaHistoryLoad:           repository.LoadLatestCodexQuotaHistoryState,
 		codexQuotaHistoryListIdentities: repository.ListActiveAuthFileUsageIdentitiesByAuthIndexes,
+		poePointsHistoryWake:            make(chan struct{}, 1),
+		poePointsHistoryStopCh:          make(chan struct{}),
+		poePointsHistoryDoneCh:          make(chan struct{}),
+		poePointsHistoryPollInterval:    poePollInterval,
+		poePointsHistoryNewTimer:        newPoePointsHistoryTimer,
+		poePointsHistoryWrite:           UpsertPoePointsHistory,
+		poePointsHistoryListIdentities:  listActivePoeIdentities,
 	}
 	go service.runUsageHeaderSnapshotWorker()
 	// history 拥有独立队列、timer 和失败状态，不能复用一分钟 cache worker 的 pending map。
 	go service.runCodexQuotaHistoryRunner()
+	go service.runPoePointsHistoryRunner()
 	return service
 }
 
@@ -268,6 +309,8 @@ func (s *Service) StopRefreshTasks() {
 	s.stopUsageHeaderSnapshotWorker()
 	// 停止新投递并等待最多两秒的 history best-effort flush 后，调用方才能关闭数据库。
 	s.stopCodexQuotaHistoryRunner()
+	// 停止 Poe points_history poller。
+	s.stopPoePointsHistoryRunner()
 	s.refreshWG.Wait()
 }
 
