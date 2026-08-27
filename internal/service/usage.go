@@ -801,3 +801,40 @@ func (s *usageService) ListUsageEventFilterOptions(ctx context.Context, filter s
 	}
 	return &servicedto.UsageEventFilterOptions{Models: options.Models}, nil
 }
+
+func (s *usageService) GetSpendDashboard(ctx context.Context, filter servicedto.UsageFilter) (*servicedto.SpendDashboard, error) {
+	ctx = usageServiceContext(ctx)
+	apiKey, err := s.resolveAPIGroupKey(ctx, filter.APIKeyID)
+	if err != nil {
+		return nil, err
+	}
+
+	record, err := repository.BuildSpendDashboard(ctx, s.db.WithContext(ctx), repodto.UsageQueryFilter{
+		Range:        filter.Range,
+		CustomUnit:   filter.CustomUnit,
+		StartTime:    filter.StartTime,
+		EndTime:      filter.EndTime,
+		EndExclusive: filter.EndExclusive,
+		AuthIndex:    filter.AuthIndex,
+		Model:        filter.Model,
+		APIGroupKey:  apiKey,
+	}, s.pricing.NewResolver())
+	if err != nil {
+		return nil, err
+	}
+
+	rows := make([]servicedto.SpendRow, 0, len(record.Rows))
+	for _, r := range record.Rows {
+		rows = append(rows, servicedto.SpendRow{
+			AuthIndex:   r.AuthIndex,
+			Model:       r.Model,
+			Date:        r.Date,
+			USDSpent:    r.USDSpent,
+			PointsSpent: r.PointsSpent,
+		})
+	}
+	return &servicedto.SpendDashboard{
+		Rows: rows,
+	}, nil
+}
+

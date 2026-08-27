@@ -756,6 +756,18 @@ export interface AnalysisResponse {
   model_efficiency: AnalysisModelEfficiencyItem[]
 }
 
+export interface SpendDashboardRow {
+  auth_index: string
+  model: string
+  date: string
+  usd_spent: number
+  points_spent: number
+}
+
+export interface SpendDashboardResponse {
+  rows: SpendDashboardRow[]
+}
+
 export interface CpaApiKeyDisplayItem {
   id: string
   keyAlias: string

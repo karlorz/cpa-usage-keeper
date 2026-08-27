@@ -59,6 +59,10 @@ func (s *analysisSplitStub) GetAnalysisLatency(_ context.Context, filter service
 	return s.latency, nil
 }
 
+func (s *analysisSplitStub) GetSpendDashboard(_ context.Context, _ servicedto.UsageFilter) (*servicedto.SpendDashboard, error) {
+	return nil, nil
+}
+
 func TestUsageAnalysisCoreOmitsLatencyDiagnostics(t *testing.T) {
 	provider := &analysisSplitStub{analysis: &servicedto.AnalysisSnapshot{
 		Granularity: servicedto.AnalysisGranularityHourly,

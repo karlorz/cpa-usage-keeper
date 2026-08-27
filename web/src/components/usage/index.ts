@@ -2,6 +2,7 @@ export { StatCards } from './StatCards';
 export { DailyAverageCard } from './DailyAverageCard';
 export { OverviewRealtimePanel } from './OverviewRealtimePanel';
 export { AnalysisPanel } from './analysis';
+export { SpendDashboardCard } from './spend';
 export { ApiKeySettingsCard } from './ApiKeySettingsCard';
 export { SessionSettingsCard } from './SessionSettingsCard';
 export { PriceSettingsCard } from './PriceSettingsCard';

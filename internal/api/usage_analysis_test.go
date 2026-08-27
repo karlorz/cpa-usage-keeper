@@ -76,6 +76,10 @@ func (s *usageAnalysisStub) GetAnalysisLatency(_ context.Context, _ servicedto.U
 	return nil, s.err
 }
 
+func (s *usageAnalysisStub) GetSpendDashboard(_ context.Context, _ servicedto.UsageFilter) (*servicedto.SpendDashboard, error) {
+	return nil, s.err
+}
+
 func TestUsageAnalysisReturnsAggregatedRows(t *testing.T) {
 	bucket := time.Date(2026, 4, 22, 10, 0, 0, 0, time.Local)
 	provider := &usageAnalysisStub{analysis: &servicedto.AnalysisSnapshot{

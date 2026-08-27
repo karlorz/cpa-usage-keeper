@@ -165,6 +165,10 @@ func (s *usageEventsStub) GetAnalysisLatency(context.Context, servicedto.UsageFi
 	return nil, s.err
 }
 
+func (s *usageEventsStub) GetSpendDashboard(context.Context, servicedto.UsageFilter) (*servicedto.SpendDashboard, error) {
+	return nil, s.err
+}
+
 type authCPAAPIKeyStub struct {
 	row entities.CPAAPIKey
 }

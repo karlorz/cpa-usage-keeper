@@ -103,6 +103,12 @@ export function formatUsd(value: number): string {
     .replace(/^US\$/, '$');
 }
 
+const poePointsFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+
+export function formatPoePoints(value: number): string {
+  return poePointsFormatter.format(value || 0);
+}
+
 export function normalizeAuthIndex(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();

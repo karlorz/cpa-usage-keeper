@@ -11,9 +11,9 @@ type PoePointsHistory struct {
 	CostPoints            *float64  `gorm:"column:cost_points"`
 	CostUSD               *float64  `gorm:"column:cost_usd"`
 	CostBreakdownInPoints *float64  `gorm:"column:cost_breakdown_in_points"`
-	ObservedAt            time.Time `gorm:"column:observed_at;index"`
-	FirstSeenAt           time.Time `gorm:"column:first_seen_at"`
-	LastSeenAt            time.Time `gorm:"column:last_seen_at"`
+	ObservedAt            time.Time `gorm:"serializer:storageTime;column:observed_at;index"`
+	FirstSeenAt           time.Time `gorm:"serializer:storageTime;column:first_seen_at"`
+	LastSeenAt            time.Time `gorm:"serializer:storageTime;column:last_seen_at"`
 }
 
 func (PoePointsHistory) TableName() string {

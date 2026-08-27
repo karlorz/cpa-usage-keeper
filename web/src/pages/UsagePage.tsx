@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiError, appPath, createUsageEventRequestLogDownloadURL, exportUsageEvents, fetchAnalysis, fetchAnalysisLatency, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, isUsageRangeBoundsConflict, logout, revokeAuthSession, updateAuthSessionAlias, updateCpaApiKeyAlias, type UsageEventsExportFormat } from '@/lib/api';
-import type { AnalysisLatencyDiagnostics, AnalysisResponse, AuthManagedSessionItem, CpaApiKeyOption, CpaApiKeySettingsItem, OverviewRealtimeWindow, StatusResponse, UsageCustomRange, UsageEvent, UsageEventRequestLogResponse, UsageSourceFilterOption, UsageTimeRange, VersionResponse } from '@/lib/types';
+import { ApiError, appPath, createUsageEventRequestLogDownloadURL, exportUsageEvents, fetchAnalysis, fetchAnalysisLatency, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchSpendDashboard, fetchStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, isUsageRangeBoundsConflict, logout, revokeAuthSession, updateAuthSessionAlias, updateCpaApiKeyAlias, type UsageEventsExportFormat } from '@/lib/api';
+import type { AnalysisLatencyDiagnostics, AnalysisResponse, AuthManagedSessionItem, CpaApiKeyOption, CpaApiKeySettingsItem, OverviewRealtimeWindow, SpendDashboardRow, StatusResponse, UsageCustomRange, UsageEvent, UsageEventRequestLogResponse, UsageSourceFilterOption, UsageTimeRange, VersionResponse } from '@/lib/types';
 import { DEFAULT_USAGE_TAB, getUsageTabPath, handleUsageTabKeyActivation, resolveInitialUsageTab, shouldHandleUsageNavigation, USAGE_TAB_OPTIONS, type UsageTab } from '@/lib/usageNavigation';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
@@ -18,6 +18,7 @@ import {
   RecentActivityPanel,
   OverviewRealtimePanel,
   AnalysisPanel,
+  SpendDashboardCard,
   ApiKeySettingsCard,
   SessionSettingsCard,
   PriceSettingsCard,
@@ -926,6 +927,8 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [analysisLatencyLoading, setAnalysisLatencyLoading] = useState(false);
   const [analysisLatencyError, setAnalysisLatencyError] = useState('');
   const [analysisLatencyData, setAnalysisLatencyData] = useState<AnalysisLatencyDiagnostics | null>(null);
+  const [spendRows, setSpendRows] = useState<SpendDashboardRow[]>([]);
+  const [spendLoading, setSpendLoading] = useState(false);
   const analysisRequestControllerRef = useRef<AbortController | null>(null);
 
   const tabOptions = useMemo(
@@ -1134,6 +1137,21 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     setAnalysisLatencyLoading(true);
     setAnalysisLatencyError('');
     setAnalysisLatencyData(null);
+    setSpendLoading(true);
+
+    fetchSpendDashboard(usageRangeQuery, controller.signal, selectedApiKeyId)
+      .then((spendResp) => {
+        if (analysisRequestControllerRef.current === controller || !controller.signal.aborted) {
+          setSpendRows(spendResp.rows || []);
+          setSpendLoading(false);
+        }
+      })
+      .catch(() => {
+        if (analysisRequestControllerRef.current === controller || !controller.signal.aborted) {
+          setSpendRows([]);
+          setSpendLoading(false);
+        }
+      });
 
     await loadAnalysisSections({
       loadCore: () => fetchAnalysis(usageRangeQuery, controller.signal, selectedApiKeyId),
@@ -2092,6 +2110,10 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   latencyError={analysisLatencyError}
                   isDark={isDark}
                   isMobile={isMobile}
+                />
+                <SpendDashboardCard
+                  rows={spendRows}
+                  loading={spendLoading}
                 />
               </>
             )}

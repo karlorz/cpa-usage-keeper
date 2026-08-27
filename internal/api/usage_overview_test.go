@@ -62,6 +62,10 @@ func (s *usageFilterStub) GetAnalysisLatency(context.Context, servicedto.UsageFi
 	return nil, s.err
 }
 
+func (s *usageFilterStub) GetSpendDashboard(context.Context, servicedto.UsageFilter) (*servicedto.SpendDashboard, error) {
+	return nil, s.err
+}
+
 func mustParseTime(t *testing.T, value string) time.Time {
 	t.Helper()
 	parsed, err := time.Parse(time.RFC3339, value)

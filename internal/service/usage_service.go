@@ -15,4 +15,5 @@ type UsageProvider interface {
 	ListUsageEventFilterOptions(context.Context, servicedto.UsageFilter) (*servicedto.UsageEventFilterOptions, error)
 	GetAnalysis(context.Context, servicedto.UsageFilter) (*servicedto.AnalysisSnapshot, error)
 	GetAnalysisLatency(context.Context, servicedto.UsageFilter) (*servicedto.AnalysisLatencyDiagnostics, error)
+	GetSpendDashboard(context.Context, servicedto.UsageFilter) (*servicedto.SpendDashboard, error)
 }
