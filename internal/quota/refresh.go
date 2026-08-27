@@ -415,6 +415,8 @@ func (s *Service) runRefreshTaskWithWorker(authIndex string) {
 	}
 	// provider 成功后立即把窗口内 token/cost 补进同一次缓存，前端读取缓存时不再触发额外统计请求。
 	response = s.attachWindowUsageStats(ctx, authIndex, response, time.Now())
+	// 若为 Poe 限额，补充本周期内已消耗的点数和美元。
+	response = s.attachPoeSpendStats(ctx, authIndex, response, time.Now())
 	// quota rows 和 token/cost 都准备好后，把任务切到 completed 并写入长期成功缓存。
 	s.markRefreshTaskCompleted(authIndex, response)
 }

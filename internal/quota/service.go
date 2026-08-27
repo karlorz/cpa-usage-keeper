@@ -371,6 +371,7 @@ func (s *Service) Check(ctx context.Context, request CheckRequest) (CheckRespons
 	if count, ok := rateLimitResetCreditsAvailableCount(providerOutput); ok {
 		response.RateLimitResetCreditsAvailableCount = count
 	}
+	response = s.attachPoeSpendStats(ctx, authIndex, response, time.Now())
 	return response, nil
 }
 

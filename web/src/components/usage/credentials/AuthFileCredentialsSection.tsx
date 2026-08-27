@@ -1903,6 +1903,25 @@ function PoeQuotaMetric({ quota }: { quota: DisplayQuota }) {
     )
   }
 
+  if (quota.key === 'usd_spent_cycle') {
+    const usedText = quota.billingUsage?.used
+    return (
+      <div className={styles.credentialPoeMetric}>
+        <span className={styles.credentialPoeMetricLabel}>{quota.label}</span>
+        <strong className={styles.credentialPoeMetricValue}>{usedText ?? '-'}</strong>
+      </div>
+    )
+  }
+
+  if (quota.key === 'points_spent_cycle') {
+    return (
+      <div className={styles.credentialPoeMetric}>
+        <span className={styles.credentialPoeMetricLabel}>{quota.label}</span>
+        {quota.used !== undefined && <strong className={styles.credentialPoeMetricValue}>{formatPoePoints(quota.used)}</strong>}
+      </div>
+    )
+  }
+
   const ariaKey = quota.key === 'current_point_balance' ? 'credentials_poe_aria_current_balance' : undefined
   return (
     <div className={styles.credentialPoeMetric} aria-label={ariaKey ? t(ariaKey, { count: quota.remaining ?? 0 }) : undefined}>

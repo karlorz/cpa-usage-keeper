@@ -645,6 +645,35 @@ describe('credentialViewModels', () => {
     })
   })
 
+  it('builds poe AI provider rows with spend rows alongside balance rows', () => {
+    const quotas = new Map<string, UsageQuotaCheckResponse>([
+      ['poe-spend-key', quotaResponse('poe-spend-key', [
+        { key: 'current_point_balance', label: 'Compute Points', scope: 'billing', metric: 'points', remaining: 4_000 },
+        { key: 'points_spent_cycle', label: 'Points Spent (Cycle)', scope: 'billing', metric: 'points', used: 1_250 },
+        { key: 'usd_spent_cycle', label: 'USD Spent (Cycle)', scope: 'billing', metric: 'usd_cents', used: 25 },
+        { key: 'total_balance_usd', label: 'USD Equivalent', scope: 'billing', metric: 'usd_cents', used: 123_45 },
+      ])],
+    ])
+
+    const rows = buildAiProviderCredentialRows([
+      identity({ auth_type: 2, identity: 'poe-spend-key', provider: 'poe' }),
+    ], quotas)
+
+    expect(rows[0].hasPoeQuota).toBe(true)
+    expect(rows[0].displayQuotas.map((quota) => quota.key)).toEqual([
+      'current_point_balance',
+      'points_spent_cycle',
+      'usd_spent_cycle',
+      'total_balance_usd',
+    ])
+    const pointsSpentRow = rows[0].displayQuotas.find((quota) => quota.key === 'points_spent_cycle')
+    expect(pointsSpentRow?.label).toBe('Points Spent (Cycle)')
+    expect(pointsSpentRow?.used).toBe(1_250)
+    const usdSpentRow = rows[0].displayQuotas.find((quota) => quota.key === 'usd_spent_cycle')
+    expect(usdSpentRow?.label).toBe('USD Spent (Cycle)')
+    expect(usdSpentRow?.billingUsage?.used).toBe('$0.25')
+  })
+
   it('keeps non-poe AI provider rows free of quota display data', () => {
     const quotas = new Map<string, UsageQuotaCheckResponse>([
       ['claude-key', quotaResponse('claude-key', [
