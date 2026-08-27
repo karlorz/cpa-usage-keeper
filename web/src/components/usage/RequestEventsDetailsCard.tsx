@@ -477,9 +477,11 @@ export function RequestEventsDetailsCard({
       const cost = costAvailable ? Math.max(toNumber(event.cost_usd), 0) : null;
       const pricingStyle = event.pricing_style === 'claude'
         ? t('usage_stats.credentials_detail_pricing_style_claude')
-        : event.pricing_style === 'openai'
-          ? t('usage_stats.credentials_detail_pricing_style_openai')
-          : '-';
+        : event.pricing_style === 'poe'
+          ? t('usage_stats.credentials_detail_pricing_style_poe')
+          : event.pricing_style === 'openai'
+            ? t('usage_stats.credentials_detail_pricing_style_openai')
+            : '-';
 
       return {
         event,

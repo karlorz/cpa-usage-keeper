@@ -97,9 +97,10 @@ const priceToInputValue = (value: number | undefined): string => (
   typeof value === 'number' && Number.isFinite(value) ? value.toString() : ''
 );
 
-const normalizePricingStyle = (style: PricingStyle | string | undefined): PricingStyle => (
-  style === 'claude' ? 'claude' : 'openai'
-);
+const normalizePricingStyle = (style: PricingStyle | string | undefined): PricingStyle => {
+  if (style === 'openai' || style === 'claude' || style === 'poe') return style;
+  return 'openai';
+};
 
 export const syncMatchToDraft = (match: PricingSyncMatch, existingPrice?: ModelPrice): PricingSyncDraft => ({
   model: match.model,
@@ -264,6 +265,7 @@ const notifyPricingPersistenceError = (
 const pricingStyleOptions = (t: (key: string) => string): SelectOption[] => [
   { value: 'openai', label: t('usage_stats.model_price_style_openai') },
   { value: 'claude', label: t('usage_stats.model_price_style_claude') },
+  { value: 'poe', label: t('usage_stats.model_price_style_poe') },
 ];
 
 export const buildPricingModelOptions = (
@@ -591,7 +593,7 @@ export function PriceSettingsCard({
                     <Select
                       value={pricingStyle}
                       options={styleOptions}
-                      onChange={(value) => setPricingStyle(value === 'claude' ? 'claude' : 'openai')}
+                      onChange={(value) => setPricingStyle(normalizePricingStyle(value))}
                       disabled={priceSaving}
                       className={styles.usagePillControl}
                     />
@@ -673,7 +675,7 @@ export function PriceSettingsCard({
                           <span className={styles.priceModel}>{formatDisplayName(model)}</span>
                           <div className={styles.priceMeta}>
                             <span>
-                              {t('usage_stats.model_price_style')}: {t(price.style === 'claude' ? 'usage_stats.model_price_style_claude' : 'usage_stats.model_price_style_openai')}
+                              {t('usage_stats.model_price_style')}: {t(price.style === 'claude' ? 'usage_stats.model_price_style_claude' : price.style === 'poe' ? 'usage_stats.model_price_style_poe' : 'usage_stats.model_price_style_openai')}
                             </span>
                             <span>
                               {t('usage_stats.model_price_prompt')}: ${price.prompt.toFixed(4)}/1M
@@ -748,7 +750,7 @@ export function PriceSettingsCard({
             <Select
               value={editStyle}
               options={styleOptions}
-              onChange={(value) => setEditStyle(value === 'claude' ? 'claude' : 'openai')}
+              onChange={(value) => setEditStyle(normalizePricingStyle(value))}
               disabled={editSaving}
               className={styles.usagePillControl}
             />
@@ -961,7 +963,7 @@ export function PriceSettingsCard({
                             <Select
                               value={draft.style}
                               options={styleOptions}
-                              onChange={(value) => handleUpdateSyncDraft(index, { style: value === 'claude' ? 'claude' : 'openai' })}
+                              onChange={(value) => handleUpdateSyncDraft(index, { style: normalizePricingStyle(value) })}
                               disabled={syncApplying}
                               className={styles.usagePillControl}
                             />

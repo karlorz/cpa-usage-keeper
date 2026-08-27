@@ -785,7 +785,7 @@ export interface CpaApiKeyOptionsResponse {
   options: CpaApiKeyOption[]
 }
 
-export type PricingStyle = 'openai' | 'claude'
+export type PricingStyle = 'openai' | 'claude' | 'poe'
 
 export interface ModelPrice {
 	style: PricingStyle

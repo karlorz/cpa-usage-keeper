@@ -23,8 +23,10 @@ export interface UsePricingDataReturn {
   previewPricingSync: () => Promise<PricingSyncPreviewResponse>;
 }
 
-const normalizePricingStyle = (style: PricingStyle | string | undefined): PricingStyle =>
-  style === 'claude' ? 'claude' : 'openai';
+const normalizePricingStyle = (style: PricingStyle | string | undefined): PricingStyle => {
+  if (style === 'openai' || style === 'claude' || style === 'poe') return style;
+  return 'openai';
+};
 
 export const pricingToModelPrice = (entry: PricingEntry): ModelPrice => ({
   style: normalizePricingStyle(entry.pricing_style),
