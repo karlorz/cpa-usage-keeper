@@ -461,6 +461,15 @@ func findQuotaRow(t *testing.T, rows []quota.QuotaRow, key string) quota.QuotaRo
 	return quota.QuotaRow{}
 }
 
+func findRowOrNil(rows []quota.QuotaRow, key string) *quota.QuotaRow {
+	for i := range rows {
+		if rows[i].Key == key {
+			return &rows[i]
+		}
+	}
+	return nil
+}
+
 func assertQuotaText(t *testing.T, row quota.QuotaRow, label string, scope string, metric string) {
 	t.Helper()
 	if row.Label != label || row.Scope != scope || row.Metric != metric {

@@ -55,6 +55,43 @@ func TestServiceIgnoresProviderOnlyIdentity(t *testing.T) {
 	}
 }
 
+func TestServiceDispatchesPoeAIProviderIdentityWhenHandlerResolves(t *testing.T) {
+	db := openQuotaTestDB(t)
+	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeAIProvider, Identity: "poe-auth", Type: "openai", Provider: "poe", Name: "Poe Key"})
+	handler := &recordingProviderHandler{output: quota.ProviderOutput{Provider: "poe", Result: quota.PoeResult{Usage: &quota.PoeUsagePayload{CurrentPointBalance: float64Ptr(300)}}}}
+	service := newQuotaServiceWithRegistry(t, db, quota.NewProviderRegistry(map[string]quota.ProviderHandler{"poe": handler}))
+
+	response, err := service.Check(context.Background(), quota.CheckRequest{AuthIndex: "poe-auth"})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if response.ID != "poe-auth" || len(response.Quota) != 1 || response.Quota[0].Key != "current_point_balance" || response.Quota[0].Remaining == nil || *response.Quota[0].Remaining != 300 {
+		t.Fatalf("unexpected check response: %+v", response)
+	}
+	if len(handler.inputs) != 1 || handler.inputs[0].Identity.Identity != "poe-auth" || handler.inputs[0].Identity.AuthType != entities.UsageIdentityAuthTypeAIProvider {
+		t.Fatalf("unexpected provider inputs: %+v", handler.inputs)
+	}
+}
+
+func TestServiceRejectsPoePrefixedProviderIdentity(t *testing.T) {
+	db := openQuotaTestDB(t)
+	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeAIProvider, Identity: "poe-lite-auth", Type: "openai", Provider: "poe-lite-dd", Name: "Poe Lite"})
+	handler := &recordingProviderHandler{output: quota.ProviderOutput{Provider: "poe", Result: quota.PoeResult{Usage: &quota.PoeUsagePayload{CurrentPointBalance: float64Ptr(300)}}}}
+	service := newQuotaServiceWithRegistry(t, db, quota.NewProviderRegistry(map[string]quota.ProviderHandler{"poe": handler}))
+
+	_, err := service.Check(context.Background(), quota.CheckRequest{AuthIndex: "poe-lite-auth"})
+	if !errors.Is(err, quota.ErrNotFound) {
+		t.Fatalf("expected not found error for poe-prefixed provider, got %v", err)
+	}
+	if len(handler.inputs) != 0 {
+		t.Fatalf("expected provider not to be called for poe-prefixed identity, got %d calls", len(handler.inputs))
+	}
+}
+
+func float64Ptr(value float64) *float64 {
+	return &value
+}
+
 func TestServiceDispatchesAuthFileIdentityByProviderBeforeType(t *testing.T) {
 	db := openQuotaTestDB(t)
 	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeAuthFile, Identity: "codex-auth", Provider: "codex", Type: "unknown", Name: "auth file"})

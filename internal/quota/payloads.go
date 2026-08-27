@@ -457,6 +457,35 @@ func parseKimiLimitWindow(object map[string]json.RawMessage) *KimiLimitWindow {
 	}
 }
 
+func parsePoeUsagePayload(response *apicall.Response) (*PoeUsagePayload, error) {
+	object, err := parseResponseObject(response)
+	if err != nil {
+		return nil, err
+	}
+	// Poe 可能返回同名字段下的嵌套对象，取 body 后继续读取，保持与其它 provider 一致的宽容路径。
+	if nested := objectField(object, "body"); nested != nil {
+		object = nested
+	}
+	payload := &PoeUsagePayload{
+		CurrentPointBalance:    xaiFloatPtrField(object, "current_point_balance", "currentPointBalance"),
+		PlanPointsBalance:     xaiFloatPtrField(object, "plan_points_balance", "planPointsBalance"),
+		AddonPointBalance:      xaiFloatPtrField(object, "addon_point_balance", "addonPointBalance"),
+		PlanBalanceUSD:         xaiFloatPtrField(object, "plan_balance_usd", "planBalanceUsd"),
+		AddonBalanceUSD:        xaiFloatPtrField(object, "addon_balance_usd", "addonBalanceUsd"),
+		TotalBalanceUSD:        xaiFloatPtrField(object, "total_balance_usd", "totalBalanceUsd"),
+		PointsCycleStartTime:   intPtrField(object, "points_cycle_start_time", "pointsCycleStartTime"),
+		NextDailyGrantTime:     intPtrField(object, "next_daily_grant_time", "nextDailyGrantTime"),
+		NextMonthlyGrantTime:   intPtrField(object, "next_monthly_grant_time", "nextMonthlyGrantTime"),
+		NextDailyGrantAmount:   xaiFloatPtrField(object, "next_daily_grant_amount", "nextDailyGrantAmount"),
+		NextMonthlyGrantAmount: xaiFloatPtrField(object, "next_monthly_grant_amount", "nextMonthlyGrantAmount"),
+		AutoRecharge:           boolPtrField(object, "auto_recharge", "autoRecharge"),
+	}
+	if payload.CurrentPointBalance == nil && payload.PlanPointsBalance == nil && payload.NextDailyGrantTime == nil {
+		return nil, fmt.Errorf("empty poe usage response")
+	}
+	return payload, nil
+}
+
 func parseCodexResetCreditResponse(response *apicall.Response) (ProviderResetOutput, error) {
 	object, err := parseResponseObject(response)
 	if err != nil {

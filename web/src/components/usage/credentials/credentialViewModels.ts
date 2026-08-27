@@ -1,5 +1,5 @@
 import type { UsageCredentialHealth, UsageIdentity, UsageQuotaCheckResponse, UsageQuotaRow } from '@/lib/types'
-import { calculateCacheReadRate, formatCompactTokenValue } from '@/utils/usage'
+import { calculateCacheReadRate, formatCompactNumber, formatCompactTokenValue } from '@/utils/usage'
 import { resolveCredentialSubscriptionBadge, type SubscriptionBadgeModel } from './credentialSubscription'
 
 export const CREDENTIALS_PAGE_SIZE = 10
@@ -86,6 +86,13 @@ export interface AiProviderCredentialRow {
   lastUsedText?: string
   statsUpdatedText?: string
   credentialHealth?: UsageCredentialHealth
+  // Poe AI Provider 行复用与 Auth Files 相同的 quota 展示字段，其它 AI Provider 保持缺省。
+  quota: UsageQuotaRow[]
+  quotaLoading: boolean
+  quotaError?: string
+  refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'
+  displayQuotas: DisplayQuota[]
+  hasPoeQuota: boolean
 }
 
 export type CredentialDetailSelection =
@@ -120,6 +127,24 @@ export function selectQuotaEligibleAuthIndexes(identities: UsageIdentity[]): str
   return identities
     .filter((identity) => identity.auth_type === 1 && !identity.is_deleted)
     .map((identity) => identity.identity)
+}
+
+// selectPoeQuotaEligibleAuthIndexes 只挑选当前页启用、未删除且 provider 精确为 poe 的 AI Provider 身份，
+// 用于行内 quota 缓存与刷新。与后端 validateRefreshAuthIndex 口径一致。
+export function selectPoeQuotaEligibleAuthIndexes(identities: UsageIdentity[]): string[] {
+  return identities
+    .filter((identity) => (
+      identity.auth_type === 2
+      && !identity.is_deleted
+      && !identity.disabled
+      && isPoeProviderIdentity(identity)
+    ))
+    .map((identity) => identity.identity)
+}
+
+// isPoeProviderIdentity 与后端 isPoeQuotaIdentity 口径一致：provider 精确等于 poe。
+export function isPoeProviderIdentity(identity: Pick<UsageIdentity, 'provider'>): boolean {
+  return identity.provider?.trim().toLowerCase() === 'poe'
 }
 
 export function paginateCredentials<T>(items: T[], page: number, pageSize = CREDENTIALS_PAGE_SIZE): CredentialsPage<T> {
@@ -179,25 +204,42 @@ export function buildAuthFileCredentialRows(
   })
 }
 
-export function buildAiProviderCredentialRows(identities: UsageIdentity[]): AiProviderCredentialRow[] {
-  return identities.map((identity) => ({
-    identity,
-    displayName: credentialDisplayName(identity),
-    maskedIdentity: identity.identity,
-    providerLabel: credentialProviderLabel(identity),
-    typeLabel: credentialTypeLabel(identity),
-    authTypeLabel: credentialAuthTypeLabel(identity),
-    priorityLabel: credentialPriorityLabel(identity.priority),
-    totalRequests: safeNumber(identity.total_requests),
-    successCount: safeNumber(identity.success_count),
-    failureCount: safeNumber(identity.failure_count),
-    successRate: successRate(identity),
-    totalTokens: safeNumber(identity.total_tokens),
-    cacheReadRate: cacheReadRate(identity),
-    lastUsedText: identity.last_used_at,
-    statsUpdatedText: identity.stats_updated_at,
-    credentialHealth: identity.credential_health,
-  }))
+export function buildAiProviderCredentialRows(
+  identities: UsageIdentity[],
+  quotas: Map<string, UsageQuotaCheckResponse> = new Map(),
+  quotaStates: Map<string, Pick<AiProviderCredentialRow, 'quotaLoading' | 'quotaError' | 'refreshStatus'>> = new Map(),
+): AiProviderCredentialRow[] {
+  return identities.map((identity) => {
+    const isPoe = isPoeProviderIdentity(identity)
+    const quotaResponse = quotas.get(identity.identity)
+    const quota = quotaResponse?.quota ?? []
+    const state = quotaStates.get(identity.identity)
+    const displayQuotas = isPoe ? quota.map(toDisplayQuota).filter(isDisplayableQuotaOrPoe) : []
+    return {
+      identity,
+      displayName: credentialDisplayName(identity),
+      maskedIdentity: identity.identity,
+      providerLabel: credentialProviderLabel(identity),
+      typeLabel: credentialTypeLabel(identity),
+      authTypeLabel: credentialAuthTypeLabel(identity),
+      priorityLabel: credentialPriorityLabel(identity.priority),
+      totalRequests: safeNumber(identity.total_requests),
+      successCount: safeNumber(identity.success_count),
+      failureCount: safeNumber(identity.failure_count),
+      successRate: successRate(identity),
+      totalTokens: safeNumber(identity.total_tokens),
+      cacheReadRate: cacheReadRate(identity),
+      lastUsedText: identity.last_used_at,
+      statsUpdatedText: identity.stats_updated_at,
+      credentialHealth: identity.credential_health,
+      quota,
+      quotaLoading: state?.quotaLoading ?? false,
+      quotaError: state?.quotaError,
+      refreshStatus: state?.refreshStatus,
+      displayQuotas,
+      hasPoeQuota: isPoe && quota.length > 0,
+    }
+  })
 }
 
 function toDisplayQuota(row: UsageQuotaRow): DisplayQuota | undefined {
@@ -205,7 +247,7 @@ function toDisplayQuota(row: UsageQuotaRow): DisplayQuota | undefined {
   const used = finiteNumber(row.used)
   const limit = finiteNumber(row.limit)
   const remaining = finiteNumber(row.remaining)
-  const percentDisplay = quotaPercent(row, used, limit)
+  const percentDisplay = quotaPercent(row, used, limit, remaining)
 
   const windowSeconds = finiteNumber(row.window?.seconds)
   const label = quotaLabel(row, windowSeconds)
@@ -236,20 +278,33 @@ function toDisplayQuota(row: UsageQuotaRow): DisplayQuota | undefined {
 }
 
 function quotaBillingUsage(row: UsageQuotaRow): QuotaBillingUsageDisplay | undefined {
-  if (row.metric !== 'usd_cents') {
-    return undefined
+  if (row.metric === 'usd_cents') {
+    const used = finiteNumber(row.used)
+    const limit = finiteNumber(row.limit)
+    const remaining = finiteNumber(row.remaining)
+    if (used === undefined && limit === undefined && remaining === undefined) {
+      return undefined
+    }
+    return {
+      used: used === undefined ? undefined : formatUSDCents(used),
+      limit: limit === undefined ? undefined : formatUSDCents(limit),
+      remaining: remaining === undefined ? undefined : formatUSDCents(remaining),
+    }
   }
-  const used = finiteNumber(row.used)
-  const limit = finiteNumber(row.limit)
-  const remaining = finiteNumber(row.remaining)
-  if (used === undefined && limit === undefined && remaining === undefined) {
-    return undefined
+
+  // Poe 月度点数额度条：metric 为 points 且存在 limit 时，将 remaining / limit 格式化为点数使用量文本（如 11.08M / 12.50M）。
+  if (row.metric === 'points' && row.limit !== undefined && row.limit > 0) {
+    const remaining = finiteNumber(row.remaining)
+    const limit = finiteNumber(row.limit)
+    if (remaining !== undefined && limit !== undefined) {
+      return {
+        remaining: formatCompactNumber(remaining),
+        limit: formatCompactNumber(limit),
+      }
+    }
   }
-  return {
-    used: used === undefined ? undefined : formatUSDCents(used),
-    limit: limit === undefined ? undefined : formatUSDCents(limit),
-    remaining: remaining === undefined ? undefined : formatUSDCents(remaining),
-  }
+
+  return undefined
 }
 
 function formatUSDCents(cents: number): string {
@@ -381,7 +436,7 @@ function quotaWindowRolePrefix(row: UsageQuotaRow): string {
   return firstNonEmpty(row.metric, keyName) ?? ''
 }
 
-function quotaPercent(row: UsageQuotaRow, used?: number, limit?: number): { percent: number | null; kind: DisplayQuota['percentKind'] } {
+function quotaPercent(row: UsageQuotaRow, used?: number, limit?: number, remaining?: number): { percent: number | null; kind: DisplayQuota['percentKind'] } {
   // 优先使用 provider 已给出的百分比；没有时才用 used/limit 推导。
   const usedPercent = finiteNumber(row.usedPercent)
   if (usedPercent !== undefined) {
@@ -390,6 +445,10 @@ function quotaPercent(row: UsageQuotaRow, used?: number, limit?: number): { perc
   const remainingFraction = finiteNumber(row.remainingFraction)
   if (remainingFraction !== undefined) {
     return { percent: clampPercent(remainingFraction * 100), kind: 'remaining' }
+  }
+  // Poe 月度授予行只给 Remaining + Limit（无 Used），剩余比例直接驱动水位条。
+  if (remaining !== undefined && limit !== undefined && limit > 0) {
+    return { percent: clampPercent((remaining / limit) * 100), kind: 'remaining' }
   }
   if (used !== undefined && limit !== undefined && limit > 0) {
     return { percent: clampPercent((used / limit) * 100), kind: 'used' }
@@ -437,6 +496,11 @@ function quotaUsedPercent(percentDisplay: { percent: number | null; kind: Displa
 
 function isDisplayableQuota(quota: DisplayQuota | undefined): quota is DisplayQuota {
   return quota !== undefined && quota.barPercent !== null
+}
+
+// isDisplayableQuotaOrPoe 对 Poe number-forward 行放行（无水位条，仅展示数值与授予计划）。
+function isDisplayableQuotaOrPoe(quota: DisplayQuota | undefined): quota is DisplayQuota {
+  return quota !== undefined && (quota.barPercent !== null || quota.scope === 'billing')
 }
 
 function credentialDisplayName(identity: UsageIdentity): string {

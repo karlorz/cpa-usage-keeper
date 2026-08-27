@@ -14,6 +14,7 @@ func NewDefaultProviderRegistry(caller ManagementAPICaller, configs ProviderConf
 		"claude":      NewClaudeProvider(caller, configs.ClaudeUsage, configs.ClaudeProfile),
 		"kimi":        NewKimiProvider(caller, configs.Kimi),
 		"xai":         NewXAIProvider(caller, configs.XAIWeekly, configs.XAIMonthly),
+		"poe":         NewPoeProvider(caller, configs.Poe),
 	})
 }
 

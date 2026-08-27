@@ -281,7 +281,14 @@ func (s *Service) validateRefreshAuthIndex(ctx context.Context, authIndex string
 	}
 
 	var active entities.UsageIdentity
-	if err := s.db.WithContext(ctx).Select("id, auth_type").Where("identity = ? AND is_deleted = ?", authIndex, false).First(&active).Error; err == nil {
+	if err := s.db.WithContext(ctx).Select("id, name, alias, auth_type, auth_type_name, identity, type, provider, lookup_key, prefix, base_url, file_name, file_path, priority, disabled, note, account_id, project_id, xai_user_id, active_start, active_until, plan_type, total_requests, success_count, failure_count, input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, total_tokens, last_aggregated_usage_event_id, first_used_at, last_used_at, stats_updated_at, is_deleted, created_at, updated_at, deleted_at").Where("identity = ? AND is_deleted = ?", authIndex, false).First(&active).Error; err == nil {
+		// AI provider 身份只有 Poe 精确匹配时才允许入队刷新，其它 provider 仍拒绝。
+		if active.AuthType == entities.UsageIdentityAuthTypeAIProvider {
+			if s.isPoeQuotaIdentity(active) {
+				return active, "", nil
+			}
+			return entities.UsageIdentity{}, "not_auth_file", nil
+		}
 		return entities.UsageIdentity{}, "not_auth_file", nil
 	} else if errors.Is(err, gorm.ErrRecordNotFound) {
 		return entities.UsageIdentity{}, "not_found", nil

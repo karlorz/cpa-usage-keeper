@@ -66,6 +66,10 @@ const row = {
   successRate: 90,
   totalTokens: 135,
   cacheReadRate: 10,
+  quota: [],
+  quotaLoading: false,
+  displayQuotas: [],
+  hasPoeQuota: false,
 } as AiProviderCredentialRow
 
 const selection: CredentialDetailSelection = { kind: 'ai-provider', row }

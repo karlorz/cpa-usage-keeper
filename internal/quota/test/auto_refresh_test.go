@@ -336,6 +336,59 @@ func TestRunAutoRefreshRunsWithoutFrontendActivation(t *testing.T) {
 	}
 }
 
+func TestRunAutoRefreshIncludesActivePoeAIProviderIdentity(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "poe-auth", Provider: "poe", Type: "openai", AuthType: entities.UsageIdentityAuthTypeAIProvider, Name: "Poe Key"})
+	handler := &refreshHandlerStub{output: ProviderOutput{Provider: "poe", Result: PoeResult{Usage: &PoeUsagePayload{CurrentPointBalance: float64Ptr(300)}}}}
+	service := newQuotaServiceWithRegistry(t, db, NewProviderRegistry(map[string]ProviderHandler{"poe": handler}))
+	setRefreshCooldown(service, func(time.Duration) {})
+
+	if err := service.RunAutoRefresh(context.Background()); err != nil {
+		t.Fatalf("RunAutoRefresh returned error: %v", err)
+	}
+	waitForRefreshTask(t, service, "poe-auth", RefreshTaskStatusCompleted)
+	service.WaitRefreshTasks()
+	if handler.callCount() != 1 {
+		t.Fatalf("expected active poe AI provider to refresh, got %d calls", handler.callCount())
+	}
+}
+
+func TestRunAutoRefreshSkipsDisabledPoeAIProviderIdentity(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	disabled := true
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "poe-disabled", Provider: "poe", Type: "openai", AuthType: entities.UsageIdentityAuthTypeAIProvider, Name: "Poe Key", Disabled: &disabled})
+	handler := &refreshHandlerStub{output: ProviderOutput{Provider: "poe", Result: PoeResult{Usage: &PoeUsagePayload{CurrentPointBalance: float64Ptr(300)}}}}
+	service := newQuotaServiceWithRegistry(t, db, NewProviderRegistry(map[string]ProviderHandler{"poe": handler}))
+	setRefreshCooldown(service, func(time.Duration) {})
+
+	if err := service.RunAutoRefresh(context.Background()); err != nil {
+		t.Fatalf("RunAutoRefresh returned error: %v", err)
+	}
+	service.WaitRefreshTasks()
+	if handler.callCount() != 0 {
+		t.Fatalf("expected disabled poe AI provider to stay out of auto refresh, got %d calls", handler.callCount())
+	}
+	if _, err := service.GetRefreshTaskByAuthIndex(context.Background(), "poe-disabled"); !errors.Is(err, ErrTaskNotFound) {
+		t.Fatalf("expected disabled poe identity to stay out of auto refresh queue, got %v", err)
+	}
+}
+
+func TestRunAutoRefreshSkipsPoePrefixedProviderIdentity(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "poe-lite-auth", Provider: "poe-lite-dd", Type: "openai", AuthType: entities.UsageIdentityAuthTypeAIProvider, Name: "Poe Lite"})
+	handler := &refreshHandlerStub{output: ProviderOutput{Provider: "poe", Result: PoeResult{Usage: &PoeUsagePayload{CurrentPointBalance: float64Ptr(300)}}}}
+	service := newQuotaServiceWithRegistry(t, db, NewProviderRegistry(map[string]ProviderHandler{"poe": handler}))
+	setRefreshCooldown(service, func(time.Duration) {})
+
+	if err := service.RunAutoRefresh(context.Background()); err != nil {
+		t.Fatalf("RunAutoRefresh returned error: %v", err)
+	}
+	service.WaitRefreshTasks()
+	if handler.callCount() != 0 {
+		t.Fatalf("expected poe-prefixed AI provider to stay out of auto refresh, got %d calls", handler.callCount())
+	}
+}
+
 func TestRunAutoRefreshStoresAliasDisplayName(t *testing.T) {
 	db := openQuotaTestDatabase(t)
 	alias := "Friendly Alias"
