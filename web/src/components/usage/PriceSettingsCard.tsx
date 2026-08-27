@@ -9,7 +9,7 @@ import { IconCheck, IconCircleAlert, IconRefreshCw } from '@/components/ui/icons
 import { useScrollBoundaryContainment } from '@/hooks/useScrollBoundaryContainment';
 import { ApiError } from '@/lib/api';
 import type { ModelPrice, PricingRule, PricingSaveResult, PricingStyle, PricingSyncMatch, PricingSyncPreviewResponse, ReplacePricingRuleInput } from '@/lib/types';
-import { normalizePricingStyle, formatPricingStyleLabel } from '@/utils/usage';
+import { normalizePricingStyle, formatPricingStyleLabel, poeCacheReadPricePer1M } from '@/utils/usage';
 import { PriceRulesModal } from './pricing/PriceRulesModal';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -134,6 +134,19 @@ export const pricingDraftToModelPrice = (draft: PricingDraftInput): ModelPrice |
 export const syncDraftToModelPrice = (draft: PricingSyncDraft): ModelPrice | null => (
   pricingDraftToModelPrice(draft)
 );
+
+export const applySyncDraftStyle = (draft: PricingSyncDraft, style: PricingStyle): PricingSyncDraft => {
+  const next: PricingSyncDraft = { ...draft, style };
+  if (style !== 'poe' || draft.style === 'poe') {
+    return next;
+  }
+  const prompt = Number(draft.prompt);
+  next.cacheWrite = '0';
+  if (Number.isFinite(prompt)) {
+    next.cacheRead = poeCacheReadPricePer1M(prompt).toString();
+  }
+  return next;
+};
 
 export const markPricingSyncFailures = (
   drafts: PricingSyncDraft[],
@@ -477,15 +490,18 @@ export function PriceSettingsCard({
 
   const handleUpdateSyncDraft = (index: number, patch: Partial<PricingSyncDraft>) => {
     const clearsFailure = Object.keys(patch).some((key) => key !== 'selected');
-    setSyncDrafts((current) => current.map((draft, draftIndex) => (
-      draftIndex === index
-        ? {
-          ...draft,
-          ...patch,
-          ...(clearsFailure ? { saveStatus: undefined, saveError: undefined } : {}),
-        }
-        : draft
-    )));
+    setSyncDrafts((current) => current.map((draft, draftIndex) => {
+      if (draftIndex !== index) return draft;
+      const next = {
+        ...draft,
+        ...patch,
+        ...(clearsFailure ? { saveStatus: undefined, saveError: undefined } : {}),
+      };
+      if (patch.style !== undefined) {
+        return applySyncDraftStyle({ ...next, style: draft.style }, patch.style);
+      }
+      return next;
+    }));
   };
 
   const handleSetAllSyncDrafts = (selected: boolean) => {

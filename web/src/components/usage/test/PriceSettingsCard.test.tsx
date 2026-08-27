@@ -12,6 +12,7 @@ import {
   notifyPricingSyncFailures,
   PriceSettingsCard,
   pricingDraftToModelPrice,
+  applySyncDraftStyle,
   syncDraftToModelPrice,
   syncMatchToDraft,
   saveSyncDraftsWithSingleModelCallback,
@@ -541,6 +542,20 @@ describe('PriceSettingsCard', () => {
 			cacheRead: 0.25,
 			cacheWrite: 3.125,
 		});
+	});
+
+	it('replaces Models.dev cache prices when a sync draft is switched to Poe', () => {
+		const draft = applySyncDraftStyle({
+			...syncDraft('dd/deepseek-v4-flash'),
+			prompt: '0.14',
+			completion: '0.28',
+			cacheRead: '0.0028',
+			cacheWrite: '1.23',
+		}, 'poe');
+
+		expect(draft.style).toBe('poe');
+		expect(Number(draft.cacheRead)).toBeCloseTo(0.028, 10);
+		expect(draft.cacheWrite).toBe('0');
 	});
 
   it('sync fallback saves selected models with single-model callbacks', async () => {

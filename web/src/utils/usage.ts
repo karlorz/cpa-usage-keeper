@@ -109,6 +109,12 @@ export function formatPoePoints(value: number): string {
   return poePointsFormatter.format(value || 0);
 }
 
+export const POE_CACHE_READ_PAY_RATE = 0.2;
+
+export function poeCacheReadPricePer1M(promptPricePer1M: number): number {
+  return promptPricePer1M * POE_CACHE_READ_PAY_RATE;
+}
+
 export function normalizePricingStyle(style: PricingStyle | string | undefined): PricingStyle {
   if (style === 'openai' || style === 'claude' || style === 'poe') return style;
   return 'openai';

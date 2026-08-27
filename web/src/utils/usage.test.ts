@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateCacheReadRate, calculateDisplayInputTokens, resolveUsageFilterWindow } from '@/utils/usage';
+import { calculateCacheReadRate, calculateDisplayInputTokens, poeCacheReadPricePer1M, resolveUsageFilterWindow } from '@/utils/usage';
 
 describe('resolveUsageFilterWindow', () => {
   it('resolves today from local day start through the refresh anchor', () => {
@@ -44,6 +44,12 @@ describe('resolveUsageFilterWindow', () => {
       endMs: nowMs,
       windowMinutes: 30 * 24 * 60,
     });
+  });
+});
+
+describe('poeCacheReadPricePer1M', () => {
+  it('uses the 80% off pay rate verified on DeepSeek-V4-Flash', () => {
+    expect(poeCacheReadPricePer1M(0.14)).toBeCloseTo(0.028, 10);
   });
 });
 
