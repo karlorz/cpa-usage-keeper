@@ -161,13 +161,19 @@ func (s *Service) pollPoePointsHistoryForIdentity(identity entities.UsageIdentit
 			Method:    "GET",
 			URL:       endpointURL,
 			Header: map[string]string{
-				"Authorization": "Bearer " + authIndex,
+				"Authorization": "Bearer $TOKEN$",
 				"Accept":        "application/json",
 			},
 		})
 		cancel()
 		if err != nil {
 			return fmt.Errorf("calling poe points_history API: %w", err)
+		}
+		if response == nil {
+			return fmt.Errorf("calling poe points_history API: empty response")
+		}
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			return targetHTTPError(response)
 		}
 
 		payload, err := parsePoePointsHistoryPayload(response)

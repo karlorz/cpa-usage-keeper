@@ -270,3 +270,101 @@ func TestPoePointsHistoryRunnerPollsAndUpserts(t *testing.T) {
 		t.Fatalf("expected count to remain 2 after second poll, got %d", count)
 	}
 }
+
+func TestPoePointsHistoryRunnerRequestHeadersAndAuth(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	if err := db.AutoMigrate(entities.All()...); err != nil {
+		t.Fatalf("AutoMigrate returned error: %v", err)
+	}
+
+	caller := &recordingManagementCaller{
+		responses: []*apicall.Response{
+			{
+				StatusCode: 200,
+				BodyText:   `{"has_more": false, "data": []}`,
+				Body:       json.RawMessage(`{"has_more": false, "data": []}`),
+			},
+		},
+	}
+
+	service := quota.NewServiceWithOptions(db, caller, quota.ServiceOptions{
+		PricingCatalog:               emptyPricingCatalogForTest(),
+		PoePointsHistoryPollInterval: 10 * time.Millisecond,
+	})
+	defer service.StopRefreshTasks()
+
+	identity := entities.UsageIdentity{
+		Identity: "poe_identity_abc123",
+		Provider: "poe",
+		Type:     "openai",
+		AuthType: entities.UsageIdentityAuthTypeAIProvider,
+		Name:     "Poe Main Key",
+	}
+
+	err := service.PollPoePointsHistoryForIdentityForTest(identity)
+	if err != nil {
+		t.Fatalf("unexpected error polling identity: %v", err)
+	}
+
+	if len(caller.requests) != 1 {
+		t.Fatalf("expected 1 API request, got %d", len(caller.requests))
+	}
+
+	req := caller.requests[0]
+	if req.AuthIndex != "poe_identity_abc123" {
+		t.Fatalf("expected AuthIndex 'poe_identity_abc123', got %q", req.AuthIndex)
+	}
+	if req.Method != "GET" {
+		t.Fatalf("expected Method 'GET', got %q", req.Method)
+	}
+	if req.Header["Authorization"] != "Bearer $TOKEN$" {
+		t.Fatalf("expected Authorization header 'Bearer $TOKEN$', got %q", req.Header["Authorization"])
+	}
+	if req.Header["Accept"] != "application/json" {
+		t.Fatalf("expected Accept header 'application/json', got %q", req.Header["Accept"])
+	}
+}
+
+func TestPoePointsHistoryRunnerHTTPErrorHandling(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	if err := db.AutoMigrate(entities.All()...); err != nil {
+		t.Fatalf("AutoMigrate returned error: %v", err)
+	}
+
+	caller := &recordingManagementCaller{
+		responses: []*apicall.Response{
+			{
+				StatusCode: 401,
+				BodyText:   `{"error": {"message": "invalid_api_key"}}`,
+				Body:       json.RawMessage(`{"error": {"message": "invalid_api_key"}}`),
+			},
+		},
+	}
+
+	service := quota.NewServiceWithOptions(db, caller, quota.ServiceOptions{
+		PricingCatalog:               emptyPricingCatalogForTest(),
+		PoePointsHistoryPollInterval: 10 * time.Millisecond,
+	})
+	defer service.StopRefreshTasks()
+
+	identity := entities.UsageIdentity{
+		Identity: "poe_invalid_key",
+		Provider: "poe",
+		Type:     "openai",
+		AuthType: entities.UsageIdentityAuthTypeAIProvider,
+		Name:     "Poe Invalid Key",
+	}
+
+	err := service.PollPoePointsHistoryForIdentityForTest(identity)
+	if err == nil {
+		t.Fatal("expected error on HTTP 401 response, got nil")
+	}
+
+	errStr := err.Error()
+	if contains(errStr, "parsing poe points_history payload") {
+		t.Fatalf("error must not wrap as payload parse error, got: %s", errStr)
+	}
+	if !contains(errStr, "HTTP 401") && !contains(errStr, "401") {
+		t.Fatalf("error must contain HTTP status 401, got: %s", errStr)
+	}
+}
