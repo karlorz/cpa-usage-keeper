@@ -596,6 +596,16 @@ describe('credentialViewModels', () => {
     expect(rows[0].hasPoeQuota).toBe(false)
   })
 
+  it('keeps hasPoeQuota true for poe rows when quota cache is empty', () => {
+    const rows = buildAiProviderCredentialRows([
+      identity({ auth_type: 2, identity: 'poe-key', provider: 'poe' }),
+    ])
+
+    expect(rows[0].hasPoeQuota).toBe(true)
+    expect(rows[0].displayQuotas).toEqual([])
+    expect(rows[0].quota).toEqual([])
+  })
+
   it('selects only enabled non-deleted poe AI providers for quota requests', () => {
     const identities = [
       identity({ auth_type: 2, identity: 'poe-active', provider: 'poe' }),

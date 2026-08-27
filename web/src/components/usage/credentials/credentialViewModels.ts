@@ -92,6 +92,7 @@ export interface AiProviderCredentialRow {
   quotaError?: string
   refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'
   displayQuotas: DisplayQuota[]
+  // Identity-gated: true when provider is poe, even if quota cache is still empty.
   hasPoeQuota: boolean
 }
 
@@ -237,7 +238,7 @@ export function buildAiProviderCredentialRows(
       quotaError: state?.quotaError,
       refreshStatus: state?.refreshStatus,
       displayQuotas,
-      hasPoeQuota: isPoe && quota.length > 0,
+      hasPoeQuota: isPoe,
     }
   })
 }
