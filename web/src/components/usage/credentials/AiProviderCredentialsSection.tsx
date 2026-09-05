@@ -134,7 +134,7 @@ export function AiProviderCredentialsSection({ rows, total, page, totalPages, pa
               </div>
             </div>
           ) : (
-            <CredentialHealthPanel displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.lastUsedText} statsUpdatedAt={row.statsUpdatedText} />
+            <CredentialHealthPanel displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.lastUsedText} statsUpdatedAt={row.statsUpdatedText} windowCacheReadRate={row.windowCacheReadRate} />
           )}
           rowClassName={styles.aiProviderCredentialRow}
         />
