@@ -98,7 +98,8 @@ func TestAttachPoeSpendStatsEnrichesCheckResponse(t *testing.T) {
 		t.Fatalf("AutoMigrate PoePointsHistory: %v", err)
 	}
 
-	now := timeutil.NormalizeStorageTime(time.Date(2026, 8, 27, 12, 0, 0, 0, time.Local))
+	// attachPoeSpendStats uses time.Now() for cycle bounds; keep seed inside the current calendar month.
+	now := timeutil.NormalizeStorageTime(time.Now())
 	costPoints := 1200.0
 	costUSD := 0.24
 

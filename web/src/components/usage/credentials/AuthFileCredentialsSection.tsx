@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { MainActionButton } from '@/components/ui/MainActionButton'
 import { Modal } from '@/components/ui/Modal'
@@ -18,6 +17,7 @@ import { CredentialSubscriptionBadge } from './CredentialSubscriptionBadge'
 import { CredentialPriorityBadge, CredentialRowShell, CredentialSectionShell, CredentialTableHeader, CredentialsPagination, MetricPill, RequestMetric, TonePercent, cacheReadRateTone, capitalize, credentialToneClassName, formatCredentialNumber, successRateTone } from './CredentialSectionShell'
 import { ProviderBrandIcon } from '@/components/ProviderBrandIcon'
 import { formatPoePoints } from '@/utils/usage'
+import type { TFunction } from 'i18next'
 
 type Translate = (key: string, options?: Record<string, string>) => string
 type InspectionIndicatorTone = 'idle' | 'running' | 'completed'
@@ -65,6 +65,10 @@ const CREDENTIAL_EXPIRY_TOOLTIP_VIEWPORT_PADDING = 8
 const QUOTA_ERROR_MESSAGE_MAX_LENGTH = 96
 const QUOTA_ERROR_PARSE_MAX_DEPTH = 10
 const AUTH_FILE_DISPLAY_MODE_STORAGE_KEY = 'cpa.credentials.authFiles.displayMode'
+const ANTIGRAVITY_QUOTA_GROUP_KEYS = new Set([
+  'antigravity-gemini-models',
+  'antigravity-claude-and-gpt-models',
+])
 export const INSPECTION_RESULT_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 const DEFAULT_INSPECTION_RESULT_PAGE_SIZE = INSPECTION_RESULT_PAGE_SIZE_OPTIONS[0]
 const INSPECTION_SELECTABLE_RESULT_STATUSES = new Set<InspectionResultStatusFilter>([
@@ -324,7 +328,7 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
             )}
             rowClassName={styles.authFileCredentialRow}
             side={showHealthMode ? (
-              <CredentialHealthPanel displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.identity.last_used_at} statsUpdatedAt={row.identity.stats_updated_at} />
+              <CredentialHealthPanel displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.identity.last_used_at} statsUpdatedAt={row.identity.stats_updated_at} windowCacheReadRate={row.windowCacheReadRate} />
             ) : (
               <div className={styles.credentialQuotaSideWithAction}>
                 <AuthFileQuotaPanel row={row} quotaUsageMode={quotaUsageMode} />
@@ -1611,23 +1615,7 @@ function isAuthFileDisplayMode(value: string | null | undefined): value is AuthF
 export function AuthFileQuotaPanel({ row, quotaUsageMode }: { row: AuthFileCredentialRow; quotaUsageMode: QuotaUsageMode }) {
   const { t } = useTranslation()
 
-  const stateSlot = renderQuotaStateSlot(row, t)
-  if (stateSlot) {
-    return stateSlot
-  }
-
-  return (
-    <div className={styles.credentialQuotaPanel}>
-      <div className={styles.credentialQuotaBars}>
-        {/* 每个可计算进度的 quota 都独占一个稳定块；不可进度化 quota 在 view model 中已过滤。 */}
-        {row.displayQuotas.map((quota) => <QuotaBar key={quota.key} quota={quota} quotaUsageMode={quotaUsageMode} />)}
-      </div>
-    </div>
-  )
-}
-
-// renderQuotaStateSlot 提取加载/错误/刷新中/无缓存的降级渲染，供 AuthFile 和 Poe quota panel 共用。
-function renderQuotaStateSlot(row: { quotaLoading: boolean; quotaError?: string; refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'; displayQuotas: DisplayQuota[] }, t: TFunction): ReactElement | null {
+  // 限额区域按加载、错误、刷新中、无缓存、可展示数据的顺序降级。
   if (row.quotaLoading) {
     return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_loading')}</div></div>
   }
@@ -1648,7 +1636,79 @@ function renderQuotaStateSlot(row: { quotaLoading: boolean; quotaError?: string;
   if (row.displayQuotas.length === 0) {
     return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_unavailable')}</div></div>
   }
-  return null
+
+  return (
+    <div className={styles.credentialQuotaPanel}>
+      <div className={styles.credentialQuotaBars}>
+        {/* 只有 canonical Antigravity 组提升为共享标题；其它 provider 继续沿用原始扁平 QuotaBar。 */}
+        {authFileQuotaPanelItems(row.displayQuotas).map((item) => item.kind === 'group'
+          ? <AntigravityQuotaGroup key={item.renderKey} group={item} quotaUsageMode={quotaUsageMode} />
+          : <QuotaBar key={item.quota.key} quota={item.quota} quotaUsageMode={quotaUsageMode} tooltipAlignRight={item.tooltipAlignRight} />)}
+      </div>
+    </div>
+  )
+}
+
+type AuthFileQuotaPanelItem =
+  | { kind: 'quota'; quota: DisplayQuota; tooltipAlignRight: boolean }
+  | AntigravityQuotaGroupItem
+
+type AntigravityQuotaGroupItem = {
+  kind: 'group'
+  renderKey: string
+  groupKey: string
+  groupLabel: string
+  groupDescription?: string
+  quotas: DisplayQuota[]
+}
+
+function authFileQuotaPanelItems(quotas: DisplayQuota[]): AuthFileQuotaPanelItem[] {
+  const items: AuthFileQuotaPanelItem[] = []
+  let flatColumn = 0
+  for (const quota of quotas) {
+    const groupKey = quota.groupKey?.trim() ?? ''
+    const groupLabel = quota.groupLabel?.trim() ?? ''
+    if (quota.scope !== 'quota_group' || !ANTIGRAVITY_QUOTA_GROUP_KEYS.has(groupKey) || !groupLabel) {
+      items.push({ kind: 'quota', quota, tooltipAlignRight: flatColumn === 1 })
+      flatColumn = (flatColumn + 1) % 2
+      continue
+    }
+    // 分组块横跨两列；只合并相邻同组行，并让后续扁平行重新从左列开始。
+    flatColumn = 0
+    const previous = items.at(-1)
+    if (previous?.kind === 'group' && previous.groupKey === groupKey) {
+      previous.quotas.push(quota)
+      if (!previous.groupDescription && quota.groupDescription?.trim()) {
+        previous.groupDescription = quota.groupDescription
+      }
+      continue
+    }
+    const group: AntigravityQuotaGroupItem = {
+      kind: 'group',
+      renderKey: `${groupKey}:${quota.key}`,
+      groupKey,
+      groupLabel,
+      groupDescription: quota.groupDescription,
+      quotas: [quota],
+    }
+    items.push(group)
+  }
+  return items
+}
+
+function AntigravityQuotaGroup({ group, quotaUsageMode }: { group: AntigravityQuotaGroupItem; quotaUsageMode: QuotaUsageMode }) {
+  return (
+    <div className={styles.credentialQuotaGroupBlock} data-quota-group={group.groupKey}>
+      <div className={styles.credentialQuotaGroupHeader}>
+        <QuotaGroupLabel label={group.groupLabel} description={group.groupDescription} />
+      </div>
+      <div className={styles.credentialQuotaGroupBars}>
+        {group.quotas.map((quota) => (
+          <QuotaBar key={quota.key} quota={quota} quotaUsageMode={quotaUsageMode} showGroupMetadata={false} />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export function formatQuotaErrorDisplay(error: string | undefined): QuotaErrorDisplay {
@@ -1861,6 +1921,32 @@ export function formatQuotaBillingUsageAriaLabel(t: Translate, billingUsage: Non
   })
 }
 
+
+// renderQuotaStateSlot 提取加载/错误/刷新中/无缓存的降级渲染，供 AuthFile 和 Poe quota panel 共用。
+function renderQuotaStateSlot(row: { quotaLoading: boolean; quotaError?: string; refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'; displayQuotas: DisplayQuota[] }, t: TFunction): ReactElement | null {
+  if (row.quotaLoading) {
+    return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_loading')}</div></div>
+  }
+  if (row.quotaError) {
+    const errorDisplay = formatQuotaErrorDisplay(row.quotaError)
+    return (
+      <div className={styles.credentialQuotaStateSlot}>
+        <div className={styles.credentialQuotaErrorSummary} title={errorDisplay.title}>
+          {errorDisplay.code && <span className={styles.credentialQuotaErrorCode}>{errorDisplay.code}</span>}
+          <span className={styles.credentialQuotaErrorMessage}>{errorDisplay.message}</span>
+        </div>
+      </div>
+    )
+  }
+  if (row.refreshStatus === 'queued' || row.refreshStatus === 'running') {
+    return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaRefreshStatus}>{t(`usage_stats.credentials_refresh_status_${row.refreshStatus}`)}</div></div>
+  }
+  if (row.displayQuotas.length === 0) {
+    return <div className={styles.credentialQuotaStateSlot}><div className={styles.credentialQuotaState}>{t('usage_stats.credentials_quota_unavailable')}</div></div>
+  }
+  return null
+}
+
 // PoeQuotaPanel 展示 Poe compute-points 余额与授予计划：余额类走 OAuth 风格的进度条，授予行保留 number-forward。
 export function PoeQuotaPanel({ row }: { row: { quotaLoading: boolean; quotaError?: string; refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'; displayQuotas: DisplayQuota[] } }) {
   const { t } = useTranslation()
@@ -1932,9 +2018,8 @@ function PoeQuotaMetric({ quota }: { quota: DisplayQuota }) {
   )
 }
 
-function QuotaBar({ quota, quotaUsageMode }: { quota: DisplayQuota; quotaUsageMode: QuotaUsageMode }) {
+function QuotaBar({ quota, quotaUsageMode, showGroupMetadata = true, tooltipAlignRight = false }: { quota: DisplayQuota; quotaUsageMode: QuotaUsageMode; showGroupMetadata?: boolean; tooltipAlignRight?: boolean }) {
   const { t } = useTranslation()
-  const groupTooltipId = useId()
   // 条宽使用剩余额度百分比，颜色跟随剩余风险状态从绿到黄到红。
   const percent = quota.barPercent ?? 0
   const width = `${Math.max(0, Math.min(100, percent))}%`
@@ -1943,10 +2028,9 @@ function QuotaBar({ quota, quotaUsageMode }: { quota: DisplayQuota; quotaUsageMo
   const resetDuration = quota.resetText ? formatQuotaResetDuration(quota.resetText) : ''
   const billingUsage = quota.billingUsage
   const windowUsage = billingUsage ? undefined : quotaWindowUsageForMode(quota, quotaUsageMode)
-  const hasGroupDescription = Boolean(quota.groupDescription?.trim())
 
   return (
-    <div className={styles.credentialQuotaBarBlock}>
+    <div className={`${styles.credentialQuotaBarBlock} ${tooltipAlignRight ? styles.credentialQuotaBarTooltipRight : ''}`.trim()}>
       <div className={styles.credentialQuotaBarHeader}>
         <span className={styles.credentialQuotaLabelGroup}>
           <span>{quota.label}</span>
@@ -1962,19 +2046,8 @@ function QuotaBar({ quota, quotaUsageMode }: { quota: DisplayQuota; quotaUsageMo
         <span className={`${styles.credentialQuotaFill} ${credentialToneClassName('credentialQuotaFill', quota.status)}`.trim()} style={{ width }} />
       </div>
       <div className={styles.credentialQuotaMeta}>
-        {quota.scope === 'quota_group' && quota.groupLabel && (
-          <span
-            className={styles.credentialQuotaGroupTooltipTarget}
-            tabIndex={hasGroupDescription ? 0 : undefined}
-            aria-describedby={hasGroupDescription ? groupTooltipId : undefined}
-          >
-            <span className={styles.credentialQuotaGroupLabel}>{quota.groupLabel}</span>
-            {hasGroupDescription && (
-              <span id={groupTooltipId} className={styles.credentialQuotaGroupTooltip} role="tooltip">
-                {quota.groupDescription}
-              </span>
-            )}
-          </span>
+        {showGroupMetadata && quota.scope === 'quota_group' && quota.groupLabel && (
+          <QuotaGroupLabel label={quota.groupLabel} description={quota.groupDescription} />
         )}
         {billingUsage && (
           <strong className={styles.credentialQuotaWindowUsage} aria-label={formatQuotaBillingUsageAriaLabel(t, billingUsage)}>
@@ -2002,12 +2075,28 @@ function QuotaBar({ quota, quotaUsageMode }: { quota: DisplayQuota; quotaUsageMo
   )
 }
 
+function QuotaGroupLabel({ label, description }: { label: string; description?: string }) {
+  const tooltipId = useId()
+  const hasDescription = Boolean(description?.trim())
+  return (
+    <span
+      className={styles.credentialQuotaGroupTooltipTarget}
+      tabIndex={hasDescription ? 0 : undefined}
+      aria-describedby={hasDescription ? tooltipId : undefined}
+    >
+      <span className={styles.credentialQuotaGroupLabel}>{label}</span>
+      {hasDescription && (
+        <span id={tooltipId} className={styles.credentialQuotaGroupTooltip} role="tooltip">
+          {description}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function formatQuotaBillingUsageText(billingUsage: NonNullable<DisplayQuota['billingUsage']>): string {
   if (billingUsage.used && billingUsage.limit) {
     return `${billingUsage.used} / ${billingUsage.limit}`
-  }
-  if (billingUsage.remaining && billingUsage.limit) {
-    return `${billingUsage.remaining} / ${billingUsage.limit}`
   }
   return billingUsage.used ?? billingUsage.remaining ?? billingUsage.limit ?? ''
 }
