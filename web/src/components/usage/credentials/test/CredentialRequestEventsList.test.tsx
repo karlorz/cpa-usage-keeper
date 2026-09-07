@@ -249,6 +249,21 @@ describe('CredentialRequestEventsList', () => {
     expect(container.textContent).not.toContain('usage_stats.request_events_filter_result')
   })
 
+  it.each([undefined, 0, 3000])('shows the API speed independently of TTFT %s', async (ttft) => {
+    await act(async () => root.render(
+      <CredentialRequestEventsList
+        events={[{ ...event, ttft_ms: ttft }]}
+        loading={false}
+        hasMore={false}
+        loadingMore={false}
+        autoLoadMore
+        onLoadMore={() => undefined}
+      />,
+    ))
+
+    expect(container.textContent).toContain('42.5 t/s')
+  })
+
   it('uses compact token units in details while keeping full values in the metric tooltip', async () => {
     const largeEvent: UsageEvent = {
       ...event,
