@@ -11,6 +11,7 @@ describe('RequestEventsDetailsCard model search', () => {
   let root: Root;
   const onModelFilterChange = vi.fn();
   const modelOptions = ['claude-sonnet-4', 'gpt-5', 'gpt-5-mini', 'gemini-2.5-pro'];
+  const sortedModelOptions = ['gpt-5', 'gpt-5-mini', 'claude-sonnet-4', 'gemini-2.5-pro'];
 
   beforeEach(async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -96,7 +97,7 @@ describe('RequestEventsDetailsCard model search', () => {
     expect(input().getAttribute('aria-expanded')).toBe('false');
     await openInput();
     expect(input().value).toBe('');
-    expect(options()).toEqual(['All', ...modelOptions]);
+    expect(options()).toEqual(['All', ...sortedModelOptions]);
     expect(document.querySelector('[role="option"][aria-selected="true"]')?.textContent).toBe('claude-sonnet-4');
     await act(async () => document.querySelector<HTMLButtonElement>('[role="option"]')!.click());
     expect(onModelFilterChange).toHaveBeenCalledExactlyOnceWith('__all__');
@@ -186,7 +187,7 @@ describe('RequestEventsDetailsCard model search', () => {
     await openInput();
     await typeQuery('gpt');
     await typeQuery('');
-    expect(options()).toEqual(['All', ...modelOptions]);
+    expect(options()).toEqual(['All', ...sortedModelOptions]);
     await act(async () => input().blur());
     expect(input().getAttribute('aria-expanded')).toBe('false');
     expect(input().value).toBe('claude-sonnet-4');

@@ -277,7 +277,7 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
                 onClick={() => onOpenDetails(row)}
               >
                 <span className={styles.credentialDetailNameText}>{row.displayName}</span>
-                <span className={styles.credentialDetailNameArrow} aria-hidden="true">›</span>
+                <span className={styles.credentialDetailNameArrow} aria-hidden="true">‹</span>
               </button>
             ) : <span>{row.displayName}</span>}
             subtitle={row.subscriptionBadge || row.remainingDaysLabel || row.priorityLabel ? (

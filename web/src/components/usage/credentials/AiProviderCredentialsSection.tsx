@@ -100,7 +100,7 @@ export function AiProviderCredentialsSection({ rows, total, page, totalPages, pa
             onClick={() => onOpenDetails(row)}
           >
               <span className={styles.credentialDetailNameText}>{row.displayName}</span>
-              <span className={styles.credentialDetailNameArrow} aria-hidden="true">›</span>
+              <span className={styles.credentialDetailNameArrow} aria-hidden="true">‹</span>
             </button>
           ) : row.displayName}
           subtitle={row.priorityLabel ? (

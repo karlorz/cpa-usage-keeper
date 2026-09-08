@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/icons';
 import type { UsageEvent, UsageEventRequestLogResponse, UsageSourceFilterOption } from '@/lib/types';
 import { useScrollBoundaryContainment } from '@/hooks/useScrollBoundaryContainment';
+import { compareModelNames } from '@/utils/modelSort';
 import {
   calculateCacheReadRate,
   formatDurationMs,
@@ -759,11 +760,14 @@ export function RequestEventsDetailsCard({
   ]);
 
   const modelOptions = useMemo(() => {
-    const options = [
+    const options = appendSelectedOption(
+      backendModelOptions.map((model) => ({ value: model, label: model })),
+      modelFilter,
+    ).sort((left, right) => compareModelNames(left.value, right.value));
+    return [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      ...backendModelOptions.map((model) => ({ value: model, label: model })),
+      ...options,
     ];
-    return appendSelectedOption(options, modelFilter);
   }, [backendModelOptions, modelFilter, t]);
 
   const sourceOptions = useMemo(() => {
