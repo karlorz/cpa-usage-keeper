@@ -34,11 +34,14 @@ describe('RequestEventsDetailsCard model filter ordering', () => {
         loading={false}
         totalCount={0}
         modelOptions={models}
+        apiKeyOptions={[]}
         sourceOptions={[]}
         modelFilter={selectedModel}
+        apiKeyFilter=""
         sourceFilter="__all__"
         resultFilter="__all__"
         onModelFilterChange={onModelFilterChange}
+        onApiKeyFilterChange={() => undefined}
         onSourceFilterChange={() => undefined}
         onResultFilterChange={() => undefined}
       />,

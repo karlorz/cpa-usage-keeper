@@ -175,8 +175,8 @@ func TestBuildCodexQuotaEfficiencyHistoryUsesLatestWindowPerRoleAndCutsOverlappi
 	if err != nil {
 		t.Fatalf("BuildCodexQuotaEfficiencyHistory returned error: %v", err)
 	}
-	if len(result.Windows) != 1 || result.SelectedWindow == nil {
-		t.Fatalf("expected only the role present in the latest response, got %+v", result.Windows)
+	if len(result.Windows) != 2 || result.SelectedWindow == nil {
+		t.Fatalf("expected both current and historical roles to remain selectable, got %+v", result.Windows)
 	}
 	if result.SelectedWindow.WindowRole != "primary" || result.SelectedWindow.WindowSeconds != int64((7*24*time.Hour)/time.Second) || !result.SelectedWindow.HasCurrentCycle {
 		t.Fatalf("expected current Primary Weekly selection, got %+v", result.SelectedWindow)

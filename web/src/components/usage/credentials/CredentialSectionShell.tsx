@@ -209,7 +209,6 @@ export function CredentialsPagination({
                 options={sortOptions}
                 onChange={onSortChange}
                 className={`${styles.credentialPaginationSelect} ${styles.credentialPaginationSortSelect}`}
-                dropdownClassName={styles.credentialPaginationDropdown}
                 ariaLabel={selectedSortLabel ? `${sortLabel}: ${selectedSortLabel}` : sortLabel}
                 fullWidth
                 dropdownMinWidth={180}
@@ -224,7 +223,6 @@ export function CredentialsPagination({
             options={CREDENTIAL_PAGE_SIZE_SELECT_OPTIONS}
             onChange={(value) => onPageSizeChange(Number(value))}
             className={`${styles.credentialPaginationSelect} ${styles.credentialPaginationPageSizeSelect}`}
-            dropdownClassName={styles.credentialPaginationDropdown}
             ariaLabel={`${rowsPerPageLabel}: ${pageSize}`}
             fullWidth={false}
             dropdownMinWidth={72}

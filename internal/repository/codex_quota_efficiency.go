@@ -118,8 +118,7 @@ func BuildCodexQuotaEfficiencyHistory(ctx context.Context, db *gorm.DB, query re
 	}
 
 	// 一次父表结果同时生成窗口选项，避免切换器为同一批数据再执行一条 distinct 查询。
-	latestObservedAt := codexQuotaEfficiencyLatestObservedAt(cycles)
-	result.Windows = buildCodexQuotaEfficiencyWindows(cycles, query.Now, latestObservedAt)
+	result.Windows = buildCodexQuotaEfficiencyWindows(cycles, query.Now)
 	selected := selectCodexQuotaEfficiencyWindow(result.Windows, query.WindowRole)
 	if selected == nil {
 		return result, nil
@@ -267,17 +266,7 @@ func quotaCyclePercentSummary(segments []entities.QuotaPercentSegment) (*int, *i
 	return &first, &last, observationCount
 }
 
-func codexQuotaEfficiencyLatestObservedAt(cycles []entities.QuotaCycle) time.Time {
-	var latest time.Time
-	for _, cycle := range cycles {
-		if cycle.LastObservedAt.After(latest) {
-			latest = cycle.LastObservedAt
-		}
-	}
-	return latest
-}
-
-func buildCodexQuotaEfficiencyWindows(cycles []entities.QuotaCycle, now time.Time, latestObservedAt time.Time) []repositorydto.CodexQuotaEfficiencyWindow {
+func buildCodexQuotaEfficiencyWindows(cycles []entities.QuotaCycle, now time.Time) []repositorydto.CodexQuotaEfficiencyWindow {
 	// 上游角色是稳定窗口身份；每个角色只保留最近一次观察到的周期长度作为选择器标题。
 	latestCycleByRole := make(map[string]entities.QuotaCycle, 2)
 	for _, cycle := range cycles {
@@ -292,10 +281,7 @@ func buildCodexQuotaEfficiencyWindows(cycles []entities.QuotaCycle, now time.Tim
 	}
 	windows := make([]repositorydto.CodexQuotaEfficiencyWindow, 0, len(latestCycleByRole))
 	for role, cycle := range latestCycleByRole {
-		// 选择器只呈现最近一次账号响应真实返回的角色，避免已消失 Secondary 与当前 Primary 显示成两个同名 Weekly。
-		if !cycle.LastObservedAt.Equal(latestObservedAt) {
-			continue
-		}
+		// 历史入口只由该角色是否还有记录决定，删除或上游角色变化不能隐藏另一份历史。
 		windows = append(windows, repositorydto.CodexQuotaEfficiencyWindow{
 			WindowRole:      role,
 			WindowKind:      codexQuotaEfficiencyWindowKind(cycle.WindowSeconds),
@@ -322,16 +308,12 @@ func selectCodexQuotaEfficiencyWindow(windows []repositorydto.CodexQuotaEfficien
 		}
 		return nil
 	}
-	// 默认先选当前活跃角色；Primary 与 Secondary 同时存在时沿用上面的稳定角色顺序。
-	for index := range windows {
-		if windows[index].HasCurrentCycle {
-			return &windows[index]
-		}
-	}
-	// 没有当前周期时选择最近观察系列，而不是假定固定 Weekly 或 FiveHour。
+	// 默认仍从最近一次观察的角色中选择；同次响应优先当前周期，再沿用 Primary 顺序。
+	// 历史入口放宽后，即使最新角色已经到期，旧角色较远的 reset 也不能抢走默认选择。
 	var selected *repositorydto.CodexQuotaEfficiencyWindow
 	for index := range windows {
-		if selected == nil || windows[index].LastObservedAt.After(selected.LastObservedAt) {
+		if selected == nil || windows[index].LastObservedAt.After(selected.LastObservedAt) ||
+			(windows[index].LastObservedAt.Equal(selected.LastObservedAt) && windows[index].HasCurrentCycle && !selected.HasCurrentCycle) {
 			selected = &windows[index]
 		}
 	}
