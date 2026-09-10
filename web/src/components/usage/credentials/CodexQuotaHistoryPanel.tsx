@@ -7,7 +7,10 @@ import quotaCostIcon from '@/assets/icons/quota-cost.svg'
 import quotaRequestIcon from '@/assets/icons/quota-request.svg'
 import quotaTokenIcon from '@/assets/icons/quota-token.svg'
 import quotaUnusedIcon from '@/assets/icons/quota-unused.svg'
-import { ApiError, fetchCodexQuotaHistory, type FetchCodexQuotaHistoryOptions } from '@/lib/api'
+import { ApiError, deleteCodexQuotaHistoryCycle, fetchCodexQuotaHistory, type FetchCodexQuotaHistoryOptions } from '@/lib/api'
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
+import { IconTrash2 } from '@/components/ui/icons'
 import type { CodexQuotaHistoryCycle, CodexQuotaHistoryResponse, CodexQuotaHistoryTransition, CodexQuotaHistoryWindow } from '@/lib/types'
 import { useThemeStore } from '@/stores'
 import { formatCompactNumber, formatUsd } from '@/utils/usage'
@@ -63,6 +66,10 @@ export function CodexQuotaHistoryPanel({ authIndex, onAuthRequired }: CodexQuota
   const [history, setHistory] = useState<CodexQuotaHistoryResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<CodexQuotaHistoryCycle | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const deleteControllerRef = useRef<AbortController | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
   const lastRequestOptionsRef = useRef<FetchCodexQuotaHistoryOptions>({})
 
@@ -79,7 +86,13 @@ export function CodexQuotaHistoryPanel({ authIndex, onAuthRequired }: CodexQuota
     setError('')
     try {
       // 窗口切换重新查询选中角色，但响应仍带回全部窗口选项；Token/Cost 指标切换不重新请求。
-      const response = await fetchCodexQuotaHistory(normalizedAuthIndex, requestOptions, controller.signal)
+      let response = await fetchCodexQuotaHistory(normalizedAuthIndex, requestOptions, controller.signal)
+      if (controllerRef.current !== controller) return
+      // 删除某角色的最后一个周期后，原选择可能消失；回到剩余窗口的默认选择。
+      if (requestOptions.windowRole && !response.selected_window && response.windows.length > 0) {
+        lastRequestOptionsRef.current = {}
+        response = await fetchCodexQuotaHistory(normalizedAuthIndex, {}, controller.signal)
+      }
       if (controllerRef.current !== controller) return
       setHistory(response)
     } catch (loadError) {
@@ -100,12 +113,52 @@ export function CodexQuotaHistoryPanel({ authIndex, onAuthRequired }: CodexQuota
   useEffect(() => {
     lastRequestOptionsRef.current = {}
     setHistory(null)
+    setDeleteTarget(null)
+    setDeleteError('')
+    setDeleting(false)
     void loadHistory()
     return () => {
       controllerRef.current?.abort()
       controllerRef.current = null
+      deleteControllerRef.current?.abort()
+      deleteControllerRef.current = null
     }
   }, [loadHistory])
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleteControllerRef.current) return
+    const windowRole = history?.selected_window?.window_role
+    const controller = new AbortController()
+    deleteControllerRef.current = controller
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteCodexQuotaHistoryCycle(authIndex.trim(), deleteTarget.id, controller.signal)
+      // 账号切换或抽屉关闭后的旧响应不能刷新另一个账号。
+      if (deleteControllerRef.current !== controller) return
+      setDeleteTarget(null)
+      setHistory(null)
+      await loadHistory(windowRole ? { windowRole } : lastRequestOptionsRef.current)
+    } catch (deleteFailure) {
+      if (controller.signal.aborted) return
+      if (deleteFailure instanceof ApiError && deleteFailure.status === 401) {
+        onAuthRequired?.()
+        return
+      }
+      setDeleteError(deleteFailure instanceof Error ? deleteFailure.message : t('usage_stats.credentials_quota_history_delete_failed'))
+    } finally {
+      if (deleteControllerRef.current === controller) {
+        deleteControllerRef.current = null
+        setDeleting(false)
+      }
+    }
+  }
+
+  const closeDelete = () => {
+    if (deleteControllerRef.current) return
+    setDeleteTarget(null)
+    setDeleteError('')
+  }
 
   const locale = i18n?.resolvedLanguage || i18n?.language
   // 当前周期身份完全由后端 status 决定；前端不使用浏览器时间重算周期状态。
@@ -126,10 +179,12 @@ export function CodexQuotaHistoryPanel({ authIndex, onAuthRequired }: CodexQuota
                 type="button"
                 className={styles.segmentButton}
                 aria-pressed={selected}
-                disabled={loading && selected}
+                disabled={deleting || (loading && selected)}
                 onClick={() => void loadHistory({ windowRole: window.window_role })}
               >
                 {formatWindowLabel(window, t)}
+                {history.windows.some((other) => other.window_role !== window.window_role && formatWindowLabel(other, t) === formatWindowLabel(window, t))
+                  ? ` · ${window.window_role === 'primary' ? 'Primary' : 'Secondary'}` : ''}
               </button>
             )
           })}
@@ -154,11 +209,36 @@ export function CodexQuotaHistoryPanel({ authIndex, onAuthRequired }: CodexQuota
             locale={locale}
             summary={currentCycle ? cycleSummaries.get(currentCycle.id) ?? null : null}
           />
-          <CyclesList cycles={history.cycles} locale={locale} summaries={cycleSummaries} />
+          <CyclesList cycles={history.cycles} locale={locale} summaries={cycleSummaries}
+            deleteDisabled={loading || deleting}
+            onDelete={(cycle) => { setDeleteError(''); setDeleteTarget(cycle) }} />
         </>
       ) : !error ? (
         <div className={styles.emptyState}>{t('usage_stats.credentials_quota_history_empty')}</div>
       ) : null}
+      <Modal
+        open={deleteTarget !== null}
+        title={t('usage_stats.credentials_quota_history_delete_title')}
+        onClose={closeDelete}
+        closeDisabled={deleting}
+        width={460}
+        footer={<div className={styles.deleteActions}>
+          <Button variant="secondary" appearance="action" onClick={closeDelete} disabled={deleting}>{t('common.cancel')}</Button>
+          <Button variant="danger" appearance="action" onClick={() => void confirmDelete()} loading={deleting}>{t('common.delete')}</Button>
+        </div>}
+      >
+        {deleteTarget ? <>
+          <p>{t('usage_stats.credentials_quota_history_delete_description')}</p>
+          <p>{t('usage_stats.credentials_quota_history_cycle_range', {
+            start: formatDateTime(deleteTarget.window_started_at, locale),
+            end: formatDateTime(deleteTarget.reset_at, locale),
+          })}</p>
+          <p>{t('usage_stats.credentials_quota_history_percent_summary', {
+            percent: deleteTarget.last_remaining_percent ?? '—', count: deleteTarget.observation_count,
+          })}</p>
+        </> : null}
+        {deleteError ? <p role="alert">{deleteError}</p> : null}
+      </Modal>
     </div>
   )
 }
@@ -465,10 +545,14 @@ function CyclesList({
   cycles,
   locale,
   summaries,
+  onDelete,
+  deleteDisabled,
 }: {
   cycles: CodexQuotaHistoryCycle[]
   locale?: string
   summaries: Map<number, QuotaCycleSummary>
+  onDelete: (cycle: CodexQuotaHistoryCycle) => void
+  deleteDisabled: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -485,7 +569,8 @@ function CyclesList({
       ) : (
         <div className={styles.cycleList}>
           {cycles.map((cycle) => (
-            <CycleCard key={cycle.id} cycle={cycle} locale={locale} summary={summaries.get(cycle.id) ?? null} />
+            <CycleCard key={cycle.id} cycle={cycle} locale={locale} summary={summaries.get(cycle.id) ?? null}
+              onDelete={() => onDelete(cycle)} deleteDisabled={deleteDisabled} />
           ))}
         </div>
       )}
@@ -497,10 +582,14 @@ function CycleCard({
   cycle,
   locale,
   summary,
+  onDelete,
+  deleteDisabled,
 }: {
   cycle: CodexQuotaHistoryCycle
   locale?: string
   summary: QuotaCycleSummary | null
+  onDelete: () => void
+  deleteDisabled: boolean
 }) {
   const { t } = useTranslation()
   const statusLabel = cycle.status === 'current'
@@ -528,6 +617,12 @@ function CycleCard({
             count: cycle.observation_count,
           })}
         </small>
+        <Button type="button" variant="ghost" size="sm" className={styles.deleteCycle}
+          onClick={onDelete} disabled={deleteDisabled}
+          aria-label={t('usage_stats.credentials_quota_history_delete_title')}
+          title={t('usage_stats.credentials_quota_history_delete_title')}>
+          <IconTrash2 size={15} aria-hidden="true" />
+        </Button>
       </div>
       <div className={styles.transitionHeader} aria-hidden="true">
         <span>{t('usage_stats.credentials_quota_history_change')}</span>

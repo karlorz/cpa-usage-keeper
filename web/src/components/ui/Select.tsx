@@ -2,7 +2,6 @@ import React, {
   useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,7 +9,9 @@ import React, {
   type ReactNode
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useAnchorPosition } from '@/hooks/useAnchorPosition';
 import { IconChevronDown } from './icons';
+import { MenuScrollArea } from './MenuScrollArea';
 import styles from './Select.module.scss';
 
 export interface SelectOption {
@@ -35,6 +36,8 @@ interface SelectProps {
   ariaDescribedBy?: string;
   fullWidth?: boolean;
   dropdownMinWidth?: number;
+  renderValue?: (option: SelectOption | undefined) => ReactNode;
+  showChevron?: boolean;
   id?: string;
   search?: {
     placeholder: string;
@@ -43,7 +46,7 @@ interface SelectProps {
 }
 
 const VIEWPORT_MARGIN = 8;
-const DROPDOWN_OFFSET = 6;
+const DROPDOWN_OFFSET = 8;
 const DROPDOWN_MAX_HEIGHT = 240;
 const DROPDOWN_Z_INDEX = 2010;
 
@@ -64,14 +67,13 @@ const findNextEnabledOptionIndex = (
   return -1;
 };
 
-const resolveDropdownStyle = (element: HTMLElement, dropdownMinWidth?: number): CSSProperties => {
-  const rect = element.getBoundingClientRect();
+const resolveDropdownStyle = (rect: DOMRect, dropdownMinWidth?: number): CSSProperties => {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const availableWidth = Math.max(0, viewportWidth - VIEWPORT_MARGIN * 2);
   const width = Math.min(Math.max(rect.width, dropdownMinWidth ?? 0), availableWidth);
   const left = clamp(
-    rect.left - (width - rect.width) / 2,
+    rect.left,
     VIEWPORT_MARGIN,
     Math.max(VIEWPORT_MARGIN, viewportWidth - width - VIEWPORT_MARGIN)
   );
@@ -116,6 +118,8 @@ export function Select({
   ariaDescribedBy,
   fullWidth = true,
   dropdownMinWidth,
+  renderValue,
+  showChevron = true,
   id,
   search,
 }: SelectProps) {
@@ -124,11 +128,12 @@ export function Select({
   const listboxId = `${selectId}-listbox`;
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const shouldScrollHighlightRef = useRef(true);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const rafRef = useRef<number | null>(null);
   const [dropdownStyle, setDropdownStyle] = useState<CSSProperties | null>(null);
   const isOpen = open && !disabled;
   const searchable = Boolean(search);
@@ -138,6 +143,7 @@ export function Select({
     return query ? options.filter((option) => option.label.toLowerCase().includes(query)) : options;
   }, [options, searchable, searchQuery]);
   const openDropdown = useCallback(() => {
+    shouldScrollHighlightRef.current = true;
     setSearchQuery('');
     setHighlightedIndex(-1);
     setOpen(true);
@@ -154,61 +160,10 @@ export function Select({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [disabled, open]);
 
-  const updateDropdownStyle = useCallback(() => {
-    if (!wrapRef.current) return;
-    setDropdownStyle(resolveDropdownStyle(wrapRef.current, dropdownMinWidth));
+  const updateDropdownStyle = useCallback((rect: DOMRect) => {
+    setDropdownStyle(resolveDropdownStyle(rect, dropdownMinWidth));
   }, [dropdownMinWidth]);
-
-  const scheduleDropdownStyleUpdate = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    if (rafRef.current !== null) {
-      window.cancelAnimationFrame(rafRef.current);
-    }
-    rafRef.current = window.requestAnimationFrame(() => {
-      rafRef.current = null;
-      updateDropdownStyle();
-    });
-  }, [updateDropdownStyle]);
-
-  useLayoutEffect(() => {
-    if (!isOpen) {
-      if (rafRef.current !== null && typeof window !== 'undefined') {
-        window.cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-      return;
-    }
-
-    updateDropdownStyle();
-
-    const handleViewportChange = () => {
-      scheduleDropdownStyleUpdate();
-    };
-
-    const resizeObserver =
-      typeof ResizeObserver !== 'undefined' && wrapRef.current
-        ? new ResizeObserver(() => {
-            scheduleDropdownStyleUpdate();
-          })
-        : null;
-
-    if (resizeObserver && wrapRef.current) {
-      resizeObserver.observe(wrapRef.current);
-    }
-
-    window.addEventListener('resize', handleViewportChange);
-    window.addEventListener('scroll', handleViewportChange, true);
-
-    return () => {
-      window.removeEventListener('resize', handleViewportChange);
-      window.removeEventListener('scroll', handleViewportChange, true);
-      resizeObserver?.disconnect();
-      if (rafRef.current !== null) {
-        window.cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-  }, [isOpen, scheduleDropdownStyleUpdate, updateDropdownStyle]);
+  useAnchorPosition(isOpen, wrapRef, updateDropdownStyle);
 
   const selectedIndex = useMemo(() => options.findIndex((option) => option.value === value), [options, value]);
   const visibleSelectedIndex = visibleOptions.findIndex((option) => option.value === value);
@@ -229,6 +184,7 @@ export function Select({
       if (!nextOption || nextOption.disabled) return;
       // 先保留输入焦点再关闭，避免 onFocus 在选中后重新展开列表。
       if (searchable) searchInputRef.current?.focus();
+      else triggerRef.current?.focus();
       onChange(nextOption.value);
       setOpen(false);
       setHighlightedIndex(nextIndex);
@@ -255,6 +211,7 @@ export function Select({
     (event: React.KeyboardEvent<HTMLButtonElement | HTMLInputElement>) => {
       if (disabled || event.nativeEvent.isComposing) return;
       const editingSearch = event.currentTarget instanceof HTMLInputElement;
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) shouldScrollHighlightRef.current = true;
 
       switch (event.key) {
         case 'ArrowDown':
@@ -299,7 +256,10 @@ export function Select({
         case 'Escape':
           if (!isOpen) return;
           event.preventDefault();
+          // 嵌套在设置弹窗时，Esc 先关闭列表，下一次才交给父弹窗。
+          event.stopPropagation();
           if (searchable) searchInputRef.current?.focus();
+          else triggerRef.current?.focus();
           setOpen(false);
           return;
         case 'Tab':
@@ -313,7 +273,7 @@ export function Select({
   );
 
   useEffect(() => {
-    if (!isOpen || resolvedHighlightedIndex < 0) return;
+    if (!isOpen || resolvedHighlightedIndex < 0 || !shouldScrollHighlightRef.current) return;
     const highlightedOption = document.getElementById(`${selectId}-option-${resolvedHighlightedIndex}`);
     highlightedOption?.scrollIntoView({ block: 'nearest' });
   }, [isOpen, resolvedHighlightedIndex, selectId, visibleOptions]);
@@ -333,7 +293,11 @@ export function Select({
         disabled={opt.disabled}
         tabIndex={searchable ? -1 : undefined}
         onMouseDown={searchable ? (event) => event.preventDefault() : undefined}
-        onMouseEnter={opt.disabled ? undefined : () => setHighlightedIndex(index)}
+        onMouseEnter={opt.disabled ? undefined : () => {
+          // 滚动时经过鼠标的选项只高亮，不反向触发自动滚动。
+          shouldScrollHighlightRef.current = false;
+          setHighlightedIndex(index);
+        }}
         onKeyDown={handleKeyDown}
         onClick={opt.disabled ? undefined : () => commitSelection(index)}
       >
@@ -352,20 +316,16 @@ export function Select({
       ? (
           <div
             ref={dropdownRef}
-            className={`${styles.dropdown} ${searchable ? styles.searchableDropdown : ''} ${dropdownClassName ?? ''}`.trim()}
+            className={`${styles.dropdown} ${dropdownClassName ?? ''}`.trim()}
             id={searchable ? undefined : listboxId}
             role={searchable ? undefined : 'listbox'}
             aria-label={searchable ? undefined : ariaLabel}
             style={dropdownStyle}
           >
-            {search ? (
-              <>
-                <div id={listboxId} role="listbox" aria-label={ariaLabel} className={styles.searchOptions}>
-                  {optionButtons}
-                </div>
-                {visibleOptions.length === 0 ? <div role="status" className={styles.noResults}>{search.noResultsText}</div> : null}
-              </>
-            ) : optionButtons}
+            <MenuScrollArea id={searchable ? listboxId : undefined} role={searchable ? 'listbox' : undefined} ariaLabel={searchable ? ariaLabel : undefined}>
+              {optionButtons}
+            </MenuScrollArea>
+            {search && visibleOptions.length === 0 ? <div role="status" className={styles.noResults}>{search.noResultsText}</div> : null}
           </div>
         )
       : null;
@@ -402,6 +362,7 @@ export function Select({
                 if (!isOpen) openDropdown();
               }}
               onChange={(event) => {
+                shouldScrollHighlightRef.current = true;
                 setSearchQuery(event.target.value);
                 setHighlightedIndex(-1);
                 setOpen(true);
@@ -416,6 +377,7 @@ export function Select({
             </span>
           </>
         ) : <button
+          ref={triggerRef}
           id={selectId}
           type="button"
           className={styles.trigger}
@@ -435,11 +397,11 @@ export function Select({
           disabled={disabled}
         >
           <span className={`${styles.triggerText} ${isPlaceholder ? styles.placeholder : ''}`}>
-            {displayText}
+            {renderValue ? renderValue(selected) : displayText}
           </span>
-          <span className={styles.triggerIcon} aria-hidden="true">
+          {showChevron && <span className={styles.triggerIcon} aria-hidden="true">
             <IconChevronDown size={14} />
-          </span>
+          </span>}
         </button>}
       </div>
       {dropdown && (typeof document === 'undefined' ? dropdown : createPortal(dropdown, document.body))}

@@ -9,6 +9,7 @@ import { useThemeStore } from '@/stores'
 import { CodexQuotaHistoryPanel } from '../CodexQuotaHistoryPanel'
 
 const fetchCodexQuotaHistory = vi.fn()
+const deleteCodexQuotaHistoryCycle = vi.fn()
 type QuotaEfficiencyChartType = 'bar' | 'line'
 type QuotaEfficiencyChartData = ChartData<QuotaEfficiencyChartType, Array<number | null>, string>
 type QuotaEfficiencyChartOptions = ChartOptions<QuotaEfficiencyChartType>
@@ -21,6 +22,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
   return {
     ...actual,
     fetchCodexQuotaHistory: (...args: unknown[]) => fetchCodexQuotaHistory(...args),
+    deleteCodexQuotaHistoryCycle: (...args: unknown[]) => deleteCodexQuotaHistoryCycle(...args),
   }
 })
 
@@ -150,6 +152,8 @@ describe('CodexQuotaHistoryPanel', () => {
     latestChartData = null
     latestChartOptions = null
     fetchCodexQuotaHistory.mockReset()
+    deleteCodexQuotaHistoryCycle.mockReset()
+    deleteCodexQuotaHistoryCycle.mockResolvedValue(undefined)
     fetchCodexQuotaHistory.mockResolvedValue(response)
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -160,6 +164,84 @@ describe('CodexQuotaHistoryPanel', () => {
     await act(async () => root.unmount())
     container.remove()
     vi.restoreAllMocks()
+  })
+
+  const openDelete = async (cycleId = 2) => {
+    await act(async () => (container.querySelector(`[data-codex-quota-cycle-id="${cycleId}"] button[aria-label="usage_stats.credentials_quota_history_delete_title"]`) as HTMLButtonElement).click())
+  }
+  const modalButton = (label: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((button) => button.textContent === label)!
+
+  it('confirms deletion of a current cycle and reloads history with the selected window', async () => {
+    await act(async () => root.render(<CodexQuotaHistoryPanel authIndex="auth-1" />))
+    await openDelete()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('usage_stats.credentials_quota_history_delete_description')
+    expect(deleteCodexQuotaHistoryCycle).not.toHaveBeenCalled()
+    const next = cloneResponse()
+    next.cycles = [{ ...next.cycles[1], status: 'current' }]
+    fetchCodexQuotaHistory.mockResolvedValueOnce(next)
+    await act(async () => modalButton('common.delete').click())
+    expect(deleteCodexQuotaHistoryCycle).toHaveBeenCalledWith('auth-1', 2, expect.any(AbortSignal))
+    expect(fetchCodexQuotaHistory).toHaveBeenLastCalledWith('auth-1', { windowRole: 'primary' }, expect.any(AbortSignal))
+    expect(container.querySelector('[data-codex-quota-cycle-id="2"]')).toBeNull()
+    expect(container.querySelector('[data-codex-quota-cycle-id="1"]')?.getAttribute('data-codex-quota-cycle-status')).toBe('current')
+  })
+
+  it('distinguishes roles whose remaining histories have the same window title', async () => {
+    const sameKind = cloneResponse()
+    sameKind.windows[1] = { ...sameKind.windows[0], window_role: 'secondary' }
+    fetchCodexQuotaHistory.mockResolvedValueOnce(sameKind)
+    await act(async () => root.render(<CodexQuotaHistoryPanel authIndex="auth-1" />))
+    const labels = Array.from(container.querySelectorAll('button[aria-pressed]'), (button) => button.textContent)
+    expect(labels[0]).not.toBe(labels[1])
+    expect(labels[0]).toContain('Primary')
+    expect(labels[1]).toContain('Secondary')
+  })
+
+  it('can cancel deletion of a completed cycle', async () => {
+    await act(async () => root.render(<CodexQuotaHistoryPanel authIndex="auth-1" />))
+    await openDelete(1)
+    await act(async () => modalButton('common.cancel').click())
+    expect(deleteCodexQuotaHistoryCycle).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-codex-quota-cycle-id="1"]')).not.toBeNull()
+  })
+
+  it('selects a remaining window after deleting the last cycle of the selected role', async () => {
+    await act(async () => root.render(<CodexQuotaHistoryPanel authIndex="auth-1" />))
+    await act(async () => (container.querySelector('button[aria-pressed="true"]') as HTMLButtonElement).click())
+    await openDelete()
+    const remaining = cloneResponse()
+    remaining.windows = [remaining.windows[1]]
+    remaining.selected_window = remaining.windows[0]
+    remaining.cycles = [{ ...remaining.cycles[0], id: 3, window_seconds: 18000 }]
+    fetchCodexQuotaHistory.mockResolvedValueOnce({ ...remaining, selected_window: null, cycles: [] })
+      .mockResolvedValueOnce(remaining)
+    await act(async () => modalButton('common.delete').click())
+    expect(fetchCodexQuotaHistory).toHaveBeenLastCalledWith('auth-1', {}, expect.any(AbortSignal))
+    expect(container.querySelector('[data-codex-quota-cycle-id="3"]')).not.toBeNull()
+  })
+
+  it('preserves the cycle and allows retry after a delete failure', async () => {
+    deleteCodexQuotaHistoryCycle.mockRejectedValueOnce(new Error('delete failed'))
+    await act(async () => root.render(<CodexQuotaHistoryPanel authIndex="auth-1" />))
+    await openDelete()
+    await act(async () => modalButton('common.delete').click())
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('delete failed')
+    expect(container.querySelector('[data-codex-quota-cycle-id="2"]')).not.toBeNull()
+    expect(modalButton('common.delete').disabled).toBe(false)
+  })
+
+  it('ignores completion of a delete after switching accounts', async () => {
+    let finish!: () => void
+    deleteCodexQuotaHistoryCycle.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
+    await act(async () => root.render(<CodexQuotaHistoryPanel authIndex="auth-1" />))
+    await openDelete()
+    await act(async () => modalButton('common.delete').click())
+    expect(modalButton('common.delete').disabled).toBe(true)
+    await act(async () => root.render(<CodexQuotaHistoryPanel authIndex="auth-2" />))
+    const calls = fetchCodexQuotaHistory.mock.calls.length
+    await act(async () => finish())
+    expect(fetchCodexQuotaHistory.mock.calls).toHaveLength(calls)
+    expect(deleteCodexQuotaHistoryCycle.mock.calls[0][2].aborted).toBe(true)
   })
 
   it('expands crossed intervals and estimates full quota only from settled percentage points', async () => {

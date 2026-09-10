@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { MainActionButton } from '@/components/ui/MainActionButton'
 import { Modal } from '@/components/ui/Modal'
+import { Select } from '@/components/ui/Select'
 import { IconChartLine, IconGaugeReset, IconRefreshCw, IconSearch, IconSettings, IconShield, IconTrash2 } from '@/components/ui/icons'
 import quotaCostIcon from '@/assets/icons/quota-cost.svg'
 import quotaTokenIcon from '@/assets/icons/quota-token.svg'
@@ -1176,9 +1177,14 @@ export function QuotaInspectionModal({
               <div className={styles.credentialInspectionResultsFooter}>
                 <label className={styles.credentialInspectionPageSizeControl}>
                   <span>{t('usage_stats.rows_per_page')}</span>
-                  <select value={resultPageData.pageSize} onChange={(event) => handleResultPageSizeChange(Number(event.target.value))}>
-                    {INSPECTION_RESULT_PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
+                  <Select
+                    value={String(resultPageData.pageSize)}
+                    options={INSPECTION_RESULT_PAGE_SIZE_OPTIONS.map((option) => ({ value: String(option), label: String(option) }))}
+                    onChange={(next) => handleResultPageSizeChange(Number(next))}
+                    ariaLabel={`${t('usage_stats.rows_per_page')}: ${resultPageData.pageSize}`}
+                    className={styles.credentialInspectionPageSizeSelect}
+                    fullWidth={false}
+                  />
                 </label>
                 <div className={styles.credentialInspectionPagination}>
                   <button type="button" onClick={() => setResultPage(resultPageData.page - 1)} disabled={resultPageData.page <= 1}>{t('usage_stats.previous_page')}</button>
@@ -1314,12 +1320,17 @@ export function QuotaAutoRefreshSettingsModal({
             {unit === 'week' ? (
               <label className={styles.credentialAutoRefreshIntervalField}>
                 <span className={styles.credentialAutoRefreshIntervalLabel}>{t('usage_stats.credentials_auto_refresh_weekday')}</span>
-                <select value={value} onChange={(event) => onValueChange(event.target.value)} disabled={scheduleControlsDisabled}>
-                  <option value="">{t('usage_stats.credentials_auto_refresh_select')}</option>
-                  {AUTO_REFRESH_WEEKDAYS.map((weekday) => (
-                    <option key={weekday} value={weekday}>{t(`usage_stats.credentials_auto_refresh_weekday_${weekday}`)}</option>
-                  ))}
-                </select>
+                <Select
+                  value={value}
+                  options={[
+                    { value: '', label: t('usage_stats.credentials_auto_refresh_select') },
+                    ...AUTO_REFRESH_WEEKDAYS.map((weekday) => ({ value: String(weekday), label: t(`usage_stats.credentials_auto_refresh_weekday_${weekday}`) })),
+                  ]}
+                  onChange={onValueChange}
+                  disabled={scheduleControlsDisabled}
+                  ariaLabel={`${t('usage_stats.credentials_auto_refresh_weekday')}: ${t(value ? `usage_stats.credentials_auto_refresh_weekday_${value}` : 'usage_stats.credentials_auto_refresh_select')}`}
+                  className={styles.credentialAutoRefreshWeekdaySelect}
+                />
               </label>
             ) : (
               <label className={styles.credentialAutoRefreshIntervalField}>

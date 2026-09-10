@@ -353,7 +353,7 @@ func TestBuildPricingSyncPreviewMatchesMetadataModels(t *testing.T) {
 		{ID: "missing-model"},
 	}}}})
 
-	preview, err := service.PreviewPricingSync(context.Background())
+	preview, err := service.PreviewPricingSync(context.Background(), "")
 	if err != nil {
 		t.Fatalf("build pricing sync preview: %v", err)
 	}
@@ -440,7 +440,7 @@ func TestBuildPricingSyncPreviewStripsCPAPrefixBeforeMatchingModelsDev(t *testin
 
 	db := openPricingServiceTestDatabase(t)
 	pricingService := service.NewPricingService(db, emptyPricingCatalogForTest(), stubModelsFetcher{result: &response.ModelsResult{Payload: models.ModelsResponse{Data: []models.ModelInfo{{ID: "openai/gpt-5.6-terra"}}}}})
-	preview, err := pricingService.PreviewPricingSync(context.Background())
+	preview, err := pricingService.PreviewPricingSync(context.Background(), "")
 	if err != nil {
 		t.Fatalf("build pricing sync preview: %v", err)
 	}
@@ -487,7 +487,7 @@ func TestBuildPricingSyncPreviewIgnoresCustomCPAPrefixForProviderSelection(t *te
 
 	db := openPricingServiceTestDatabase(t)
 	pricingService := service.NewPricingService(db, emptyPricingCatalogForTest(), stubModelsFetcher{result: &response.ModelsResult{Payload: models.ModelsResponse{Data: []models.ModelInfo{{ID: "MIMO/mimo-v2.5-pro"}}}}})
-	preview, err := pricingService.PreviewPricingSync(context.Background())
+	preview, err := pricingService.PreviewPricingSync(context.Background(), "")
 	if err != nil {
 		t.Fatalf("build pricing sync preview: %v", err)
 	}
@@ -534,7 +534,7 @@ func TestBuildPricingSyncPreviewKeepsCandidatesWhenPrefixProviderLacksModel(t *t
 
 	db := openPricingServiceTestDatabase(t)
 	pricingService := service.NewPricingService(db, emptyPricingCatalogForTest(), stubModelsFetcher{result: &response.ModelsResult{Payload: models.ModelsResponse{Data: []models.ModelInfo{{ID: "deepseek/deepseek-v3.2"}}}}})
-	preview, err := pricingService.PreviewPricingSync(context.Background())
+	preview, err := pricingService.PreviewPricingSync(context.Background(), "")
 	if err != nil {
 		t.Fatalf("build pricing sync preview: %v", err)
 	}
@@ -569,7 +569,7 @@ func TestBuildPricingSyncPreviewDefaultsMissingCachePricesToZero(t *testing.T) {
 
 	db := openPricingServiceTestDatabase(t)
 	pricingService := service.NewPricingService(db, emptyPricingCatalogForTest(), stubModelsFetcher{result: &response.ModelsResult{Payload: models.ModelsResponse{Data: []models.ModelInfo{{ID: "gpt-no-cache-price"}}}}})
-	preview, err := pricingService.PreviewPricingSync(context.Background())
+	preview, err := pricingService.PreviewPricingSync(context.Background(), "")
 	if err != nil {
 		t.Fatalf("build pricing sync preview: %v", err)
 	}
@@ -604,7 +604,7 @@ func TestBuildPricingSyncPreviewRejectsNegativeOpenAICacheWrite(t *testing.T) {
 
 	db := openPricingServiceTestDatabase(t)
 	service := service.NewPricingService(db, emptyPricingCatalogForTest(), stubModelsFetcher{result: &response.ModelsResult{Payload: models.ModelsResponse{Data: []models.ModelInfo{{ID: "gpt-negative-write"}}}}})
-	preview, err := service.PreviewPricingSync(context.Background())
+	preview, err := service.PreviewPricingSync(context.Background(), "")
 	if err != nil {
 		t.Fatalf("build pricing sync preview: %v", err)
 	}
@@ -649,7 +649,7 @@ func TestBuildPricingSyncPreviewOverridesModelsDevCacheForPoePrefixedDeepSeekV4F
 	pricingService := service.NewPricingService(db, emptyPricingCatalogForTest(), stubModelsFetcher{result: &response.ModelsResult{Payload: models.ModelsResponse{Data: []models.ModelInfo{
 		{ID: "dd/deepseek-v4-flash"},
 	}}}})
-	preview, err := pricingService.PreviewPricingSync(context.Background())
+	preview, err := pricingService.PreviewPricingSync(context.Background(), "models-dev")
 	if err != nil {
 		t.Fatalf("build pricing sync preview: %v", err)
 	}

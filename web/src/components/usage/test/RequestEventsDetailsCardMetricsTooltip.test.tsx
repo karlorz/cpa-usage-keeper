@@ -57,6 +57,9 @@ const renderCardElement = (events: UsageEvent[]) => (
     resultFilter="__all__"
     visibleColumnIds={['total_tokens', 'cache_read_rate']}
     columnOrder={['total_tokens', 'cache_read_rate']}
+    apiKeyOptions={[]}
+    apiKeyFilter=""
+    onApiKeyFilterChange={() => undefined}
     onModelFilterChange={() => undefined}
     onSourceFilterChange={() => undefined}
     onResultFilterChange={() => undefined}

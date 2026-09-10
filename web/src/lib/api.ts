@@ -1,4 +1,4 @@
-import { type AnalysisLatencyDiagnostics, type AnalysisResponse, type AuthFilesManagementResponse, type AuthManagedSessionsResponse, type AuthSessionResponse, type CodexQuotaHistoryResponse, type CpaApiKeyDisplayItem, type CpaApiKeyOptionsResponse, type CpaApiKeySettingsResponse, type CpaApiKeysResponse, type ErrorEventsResponse, type OverviewRealtimeBlock, type OverviewRealtimeWindow, type PricingEntry, type PricingResponse, type PricingRulesResponse, type PricingSyncPreviewResponse, type QuotaAutoRefreshSettings, type ReplacePricingRulesRequest, type SpendDashboardResponse, type StatusResponse, type UpdateCheckResponse, type UsageActivityRequest, type UsageActivityResponse, type UsageEventModelFilterOptionsResponse, type UsageEventRequestLogResponse, type UsageEventSourceFilterOptionsResponse, type UsageRangeRequest, type UsedModelsResponse, type UsageIdentitiesPageResponse, type UsageIdentitiesResponse, type UsageEventsResponse, type UsageIdentity, type UsageIdentityAuthType, type UsageOverviewResponse, type UsageQuotaCacheResponse, type UsageQuotaInspectionStatusResponse, type UsageQuotaRefreshResponse, type UsageQuotaRefreshTaskResponse, type UsageQuotaResetCreditsResponse, type UsageQuotaResetResponse, type VersionResponse } from './types'
+import { type AnalysisLatencyDiagnostics, type AnalysisResponse, type AuthFilesManagementResponse, type AuthManagedSessionsResponse, type AuthSessionResponse, type CodexQuotaHistoryResponse, type CpaApiKeyDisplayItem, type CpaApiKeyOptionsResponse, type CpaApiKeySettingsResponse, type CpaApiKeysResponse, type ErrorEventsResponse, type OverviewRealtimeBlock, type OverviewRealtimeWindow, type PricingEntry, type PricingResponse, type PricingRulesResponse, type PricingSyncPreviewResponse, type PricingSyncSource, type QuotaAutoRefreshSettings, type ReplacePricingRulesRequest, type SpendDashboardResponse, type StatusResponse, type UpdateCheckResponse, type UsageActivityRequest, type UsageActivityResponse, type UsageEventModelFilterOptionsResponse, type UsageEventRequestLogResponse, type UsageEventSourceFilterOptionsResponse, type UsageRangeRequest, type UsedModelsResponse, type UsageIdentitiesPageResponse, type UsageIdentitiesResponse, type UsageEventsResponse, type UsageIdentity, type UsageIdentityAuthType, type UsageOverviewResponse, type UsageQuotaCacheResponse, type UsageQuotaInspectionStatusResponse, type UsageQuotaRefreshResponse, type UsageQuotaRefreshTaskResponse, type UsageQuotaResetCreditsResponse, type UsageQuotaResetResponse, type VersionResponse } from './types'
 import { isCPAMCEmbed } from '@/embed/cpamcEmbed'
 import { resolveUsageRequestRange } from '@/utils/usage/rangeQuery'
 
@@ -677,6 +677,15 @@ export async function fetchCodexQuotaHistory(
   return response.json()
 }
 
+export async function deleteCodexQuotaHistoryCycle(authIndex: string, cycleId: number, signal?: AbortSignal): Promise<void> {
+  const response = await apiFetch(apiPath(`/quota/history/${encodeURIComponent(authIndex)}/cycles/${cycleId}`), {
+    method: 'DELETE', signal,
+  })
+  if (!response.ok) {
+    await parseApiError(response, `Failed to delete Codex quota cycle: ${response.status}`)
+  }
+}
+
 export async function refreshUsageQuotas(authIndexes: string[], signal?: AbortSignal): Promise<UsageQuotaRefreshResponse> {
   // refresh 会创建后台任务，前端提交当前页所有 auth_index。
   const response = await apiFetch(apiPath('/quota/refresh'), {
@@ -799,6 +808,7 @@ export async function fetchAnalysisLatency(request: UsageRangeRequest, signal?: 
   }
   return response.json()
 }
+
 
 export async function fetchSpendDashboard(request: UsageRangeRequest, signal?: AbortSignal, apiKeyId?: string, authIndex?: string, model?: string): Promise<SpendDashboardResponse> {
   const params = buildUsageRangeParams(request)
@@ -950,8 +960,8 @@ export async function replacePricingRules(
   return response.json()
 }
 
-export async function fetchPricingSyncPreview(signal?: AbortSignal): Promise<PricingSyncPreviewResponse> {
-  const response = await apiFetch(apiPath('/pricing/sync/preview'), { signal, cache: 'no-store' })
+export async function fetchPricingSyncPreview(source: PricingSyncSource = 'models-dev', signal?: AbortSignal): Promise<PricingSyncPreviewResponse> {
+  const response = await apiFetch(apiPath('/pricing/sync/preview') + '?source=' + encodeURIComponent(source), { signal, cache: 'no-store' })
   if (!response.ok) {
     await parseApiError(response, `Failed to preview pricing sync: ${response.status}`)
   }

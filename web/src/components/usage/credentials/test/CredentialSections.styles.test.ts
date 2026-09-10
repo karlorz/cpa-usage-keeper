@@ -266,7 +266,7 @@ describe('Credential section styles', () => {
     const scheduleGridStyles = cssBlock('.credentialAutoRefreshScheduleGrid')
     const unitSwitcherStyles = cssBlock('.credentialAutoRefreshUnitSwitcher')
     const intervalFieldStyles = cssBlock('.credentialAutoRefreshIntervalField')
-    const intervalControlStyles = scssRule(intervalFieldStyles, 'input,')
+    const intervalControlStyles = scssRule(intervalFieldStyles, 'input')
     const tipStyles = cssBlock('.credentialAutoRefreshScheduleTip')
 
     expect(authFileSectionSource).toContain('credentialAutoRefreshScheduleArea')
@@ -296,8 +296,7 @@ describe('Credential section styles', () => {
     expect(intervalFieldStyles).toContain('max-width: 100%;')
     expect(intervalControlStyles).toContain('min-height: 36px;')
     expect(intervalControlStyles).toContain('border-radius: 999px;')
-    expect(credentialStyles).toMatch(/\.credentialAutoRefreshIntervalField\s*\{[\s\S]*?input,\s*select\s*\{[\s\S]*?text-align:\s*center;/)
-    expect(intervalFieldStyles).toMatch(/select\s*\{[\s\S]*?grid-column:\s*span 2;/)
+    expect(intervalControlStyles).toContain('text-align: center;')
     expect(credentialStyles).toMatch(/\.credentialAutoRefreshIntervalLabel\s*\{[\s\S]*?text-align:\s*right;/)
     expect(credentialStyles).toMatch(/\.credentialAutoRefreshUnitSuffix\s*\{[\s\S]*?text-align:\s*left;/)
     expect(credentialStyles).toMatch(/\.credentialAutoRefreshUnitSuffix\s*\{[\s\S]*?overflow:\s*visible;/)
@@ -522,7 +521,6 @@ describe('Credential section styles', () => {
     const sortControl = scssRule(credentialStyles, '.credentialPaginationSortControl')
     const sortSizer = scssRule(credentialStyles, '.credentialPaginationSortSizer', 1)
     const sortSelect = scssRule(credentialStyles, '.credentialPaginationSortSelect', 1)
-    const paginationDropdown = scssRule(credentialStyles, '.credentialPaginationDropdown')
 
     expect(credentialStyles).toMatch(/\.credentialPagination\s*\{[\s\S]*?--usage-pagination-bar-height:\s*51px;/)
     expect(credentialStyles).toMatch(/\.credentialPagination\s*\{[\s\S]*?height:\s*var\(--usage-pagination-bar-height\);/)
@@ -553,9 +551,6 @@ describe('Credential section styles', () => {
     expect(sortSelect).toContain('width: 100%')
     expect(sortSelect).not.toContain('width: 124px')
     expect(scssRule(credentialStyles, '.credentialPaginationPageSizeSelect')).toContain('width: 64px')
-    expect(credentialShellSource.match(/dropdownClassName=\{styles\.credentialPaginationDropdown\}/g)).toHaveLength(2)
-    expect(paginationDropdown).toContain(":global([role='option'])")
-    expect(paginationDropdown).toContain('font-size: 11px')
   })
 
   it('gives every Auth Files credential label a dedicated visual treatment', () => {

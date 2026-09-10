@@ -887,7 +887,10 @@ export interface PricingSyncMatch {
 	cache_write_price_per_1m: number
 }
 
+export type PricingSyncSource = 'models-dev' | 'litellm'
+
 export interface PricingSyncPreviewResponse {
+  source_id: PricingSyncSource
   source: string
   source_url: string
   metadata_models: number

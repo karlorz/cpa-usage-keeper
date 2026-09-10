@@ -4,23 +4,18 @@ import '@/i18n';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ApiError } from '@/lib/api';
+import { buildPricingModelOptions, PriceSettingsCard } from '../PriceSettingsCard';
 import {
-  buildPricingModelOptions,
-  buildSelectedSyncPrices,
-  markPricingSyncFailures,
-  notifyPricingSyncUnexpectedError,
-  notifyPricingSyncFailures,
-  PriceSettingsCard,
-  pricingDraftToModelPrice,
   applySyncDraftStyle,
-  syncDraftToModelPrice,
-  syncMatchToDraft,
-  saveSyncDraftsWithSingleModelCallback,
+  buildSelectedSyncPrices, markPricingSyncFailures, notifyPricingSyncUnexpectedError,
+  notifyPricingSyncFailures, pricingDraftToModelPrice, saveSyncDraftsWithSingleModelCallback,
+  syncDraftToModelPrice, syncMatchToDraft,
   type PricingSyncDraft,
-} from '../PriceSettingsCard';
+} from '../pricing/pricingDrafts';
 
 const countOccurrences = (text: string, value: string) => text.split(value).length - 1;
-const source = readFileSync(new URL('../PriceSettingsCard.tsx', import.meta.url), 'utf8');
+const source = ['../PriceSettingsCard.tsx', '../pricing/PriceSyncPanel.tsx', '../pricing/pricingDrafts.ts']
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n');
 
 const syncDraft = (model: string): PricingSyncDraft => ({
   model,
@@ -260,7 +255,9 @@ describe('PriceSettingsCard', () => {
         modelPrices={{}}
         onPriceSave={() => undefined}
         onPriceDelete={() => undefined}
+        onSyncPricesChange={async (prices) => ({ successModels: Object.keys(prices), failures: [] })}
         onSyncPreview={async () => ({
+          source_id: 'models-dev',
           source: 'Models.dev',
           source_url: 'https://models.dev/api.json',
           metadata_models: 1,
@@ -315,7 +312,6 @@ describe('PriceSettingsCard', () => {
     expect(notices).toEqual([
       { kind: 'error', message: 'Unable to sync model prices: connection reset' },
     ]);
-    expect(countOccurrences(source, 'notifyPricingSyncUnexpectedError(error, t, onNotice)')).toBe(2);
   });
 
   it('shows an actionable notice when Models.dev times out', () => {
@@ -562,6 +558,10 @@ describe('PriceSettingsCard', () => {
 		});
 	});
 
+
+});
+
+
 	it('replaces Models.dev cache prices when a sync draft is switched to Poe', () => {
 		const draft = applySyncDraftStyle({
 			...syncDraft('dd/deepseek-v4-flash'),
@@ -602,7 +602,6 @@ describe('PriceSettingsCard', () => {
     ]);
     expect(result).toEqual({ successModels: ['gpt-4o', 'claude-sonnet'], failures: [] });
   });
-});
 
 describe('buildPricingModelOptions', () => {
   it('keeps unconfigured models first and applies the shared ordering within both groups', () => {
