@@ -44,9 +44,6 @@ const renderCard = (props: Partial<React.ComponentProps<typeof RequestEventsDeta
       modelFilter="__all__"
       sourceFilter="__all__"
       resultFilter="__all__"
-      apiKeyOptions={[]}
-      apiKeyFilter=""
-      onApiKeyFilterChange={() => undefined}
       onModelFilterChange={() => undefined}
       onSourceFilterChange={() => undefined}
       onResultFilterChange={() => undefined}

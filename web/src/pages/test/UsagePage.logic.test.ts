@@ -628,7 +628,6 @@ describe('UsagePage request event preferences', () => {
     expect(preferences).toEqual({
       version: 9,
       filters: {
-        apiKeyId: '',
         model: 'claude-opus',
         source: 'authidx-source-b',
         result: 'failed',
@@ -650,7 +649,6 @@ describe('UsagePage request event preferences', () => {
     });
 
     expect(preferences.filters).toEqual({
-      apiKeyId: '',
       model: '__all__',
       source: '__all__',
       result: '__all__',
@@ -718,7 +716,6 @@ describe('UsagePage request event preferences', () => {
     expect(stored).toEqual({
       version: 9,
       filters: {
-        apiKeyId: '',
         model: '__all__',
         source: '__all__',
         result: '__all__',
@@ -736,7 +733,6 @@ describe('UsagePage request event preferences', () => {
     saveRequestEventsPreferences({
       version: 9,
       filters: {
-        apiKeyId: '',
         model: '__all__',
         source: '__all__',
         result: '__all__',
@@ -754,7 +750,6 @@ describe('UsagePage request event preferences', () => {
     });
 
     expect(loadRequestEventsPreferences(storage).filters).toEqual({
-      apiKeyId: '',
       model: '__all__',
       source: '__all__',
       result: '__all__',
@@ -763,7 +758,6 @@ describe('UsagePage request event preferences', () => {
     saveRequestEventsPreferences({
       version: 9,
       filters: {
-        apiKeyId: '',
         model: 'gpt-4.1',
         source: 'source-a',
         result: 'success',
@@ -775,7 +769,6 @@ describe('UsagePage request event preferences', () => {
     expect(JSON.parse(storage.value(REQUEST_EVENTS_PREFERENCES_STORAGE_KEY) ?? '')).toEqual({
       version: 9,
       filters: {
-        apiKeyId: '',
         model: 'gpt-4.1',
         source: 'source-a',
         result: 'success',

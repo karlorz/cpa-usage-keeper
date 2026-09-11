@@ -597,6 +597,14 @@ export async function fetchUsageIdentities(signal?: AbortSignal): Promise<UsageI
   return response.json()
 }
 
+export async function fetchUsageIdentity(id: string, signal?: AbortSignal): Promise<UsageIdentity> {
+  const response = await apiFetch(apiPath(`/usage/identities/${encodeURIComponent(id)}`), { signal })
+  if (!response.ok) {
+    await parseApiError(response, `Failed to load usage identity: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function fetchUsageIdentitiesPage(signal?: AbortSignal, options?: FetchUsageIdentitiesPageOptions): Promise<UsageIdentitiesPageResponse> {
   // Credentials 两个分区共用分页接口，通过 auth_type 控制服务端过滤。
   const params = new URLSearchParams()
@@ -638,6 +646,14 @@ export async function updateUsageIdentityAlias(id: string, alias: string | null)
   })
   if (!response.ok) {
     await parseApiError(response, `Failed to update usage identity alias: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function resetUsageIdentityStats(id: string): Promise<UsageIdentity> {
+  const response = await apiFetch(apiPath(`/usage/identities/${encodeURIComponent(id)}/stats/reset`), { method: 'POST' })
+  if (!response.ok) {
+    await parseApiError(response, `Failed to reset usage identity stats: ${response.status}`)
   }
   return response.json()
 }

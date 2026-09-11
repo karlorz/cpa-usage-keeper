@@ -86,6 +86,71 @@ describe('DashboardToolbar', () => {
     expect(document.activeElement).toBe(trigger());
   });
 
+  it.each([false, true])('commits a touch selection after a blur with no focus target, remounting toolbar: %s', async (remount) => {
+    function Pages() {
+      const [page, setPage] = useState('overview');
+      return <DashboardToolbar key={remount ? page : 'shared'} items={items} activeId={page} onNavigate={(id) => { navigate(id); setPage(id); }} onRefresh={refresh} />;
+    }
+    await act(async () => root.render(<Pages />));
+    const trigger = () => container.querySelector<HTMLButtonElement>('[data-dashboard-page-trigger]')!;
+    await act(async () => trigger().click());
+    const next = container.querySelector<HTMLAnchorElement>('[data-dashboard-page-menu] a[href="/cpa/analysis"]')!;
+    await act(async () => next.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' })));
+    // Safari 的触摸点击可能先失焦，且不会把 relatedTarget 指向被点击的链接。
+    await act(async () => (document.activeElement as HTMLElement).blur());
+    expect(next.isConnected).toBe(true);
+    await act(async () => next.click());
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('analysis');
+    expect(trigger().getAttribute('aria-label')).toContain('Analysis');
+    expect(trigger().getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it.each([
+    { part: 'name', pointerType: 'touch' },
+    { part: 'arrow', pointerType: 'touch' },
+    { part: 'name', pointerType: 'mouse' },
+    { part: 'arrow', pointerType: 'mouse' },
+  ])('toggles from the $part with $pointerType when blur has no focus target', async ({ part, pointerType }) => {
+    await render();
+    const trigger = container.querySelector<HTMLButtonElement>('[data-dashboard-page-trigger]')!;
+    const target = trigger.querySelector(part === 'name' ? '[data-dashboard-page-label]' : 'svg')!;
+    await act(async () => target.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    await act(async () => target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType })));
+    await act(async () => (document.activeElement as HTMLElement).blur());
+    await act(async () => target.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-dashboard-page-menu]')).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it.each(['toolbar', 'page'])('closes before an outside touch moves focus: %s', async (target) => {
+    await render();
+    const trigger = container.querySelector<HTMLButtonElement>('[data-dashboard-page-trigger]')!;
+    await act(async () => trigger.click());
+    const outside = target === 'toolbar' ? container.querySelector<HTMLButtonElement>('[data-dashboard-refresh]')! : document.body;
+    await act(async () => outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' })));
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    if (target === 'toolbar') {
+      await act(async () => outside.click());
+      expect(refresh).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('keeps keyboard focus inside the menu and closes when focus moves to a filter', async () => {
+    await render();
+    const trigger = container.querySelector<HTMLButtonElement>('[data-dashboard-page-trigger]')!;
+    await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    const current = container.querySelector<HTMLAnchorElement>('[data-dashboard-page-menu] a[aria-current="page"]')!;
+    expect(document.activeElement).toBe(current);
+    await act(async () => current.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    expect(document.activeElement?.getAttribute('href')).toBe('/cpa/analysis');
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-dashboard-filters] button')!.focus());
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('keeps the current scroll position when reselecting the current page or refreshing', async () => {
     const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     await render();

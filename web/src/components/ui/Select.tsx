@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useAnchorPosition } from '@/hooks/useAnchorPosition';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { IconChevronDown } from './icons';
 import { MenuScrollArea } from './MenuScrollArea';
 import styles from './Select.module.scss';
@@ -67,20 +68,24 @@ const findNextEnabledOptionIndex = (
   return -1;
 };
 
-const resolveDropdownStyle = (rect: DOMRect, dropdownMinWidth?: number): CSSProperties => {
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
+const resolveDropdownStyle = (rect: DOMRect, dropdownMinWidth?: number, touch = false): CSSProperties => {
+  const viewport = window.visualViewport;
+  const viewportWidth = viewport?.width ?? window.innerWidth;
+  const viewportHeight = viewport?.height ?? window.innerHeight;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
   const availableWidth = Math.max(0, viewportWidth - VIEWPORT_MARGIN * 2);
   const width = Math.min(Math.max(rect.width, dropdownMinWidth ?? 0), availableWidth);
   const left = clamp(
     rect.left,
-    VIEWPORT_MARGIN,
-    Math.max(VIEWPORT_MARGIN, viewportWidth - width - VIEWPORT_MARGIN)
+    viewportLeft + VIEWPORT_MARGIN,
+    Math.max(viewportLeft + VIEWPORT_MARGIN, viewportLeft + viewportWidth - width - VIEWPORT_MARGIN)
   );
-  const spaceBelow = viewportHeight - rect.bottom - VIEWPORT_MARGIN - DROPDOWN_OFFSET;
-  const spaceAbove = rect.top - VIEWPORT_MARGIN - DROPDOWN_OFFSET;
+  const spaceBelow = viewportTop + viewportHeight - rect.bottom - VIEWPORT_MARGIN - DROPDOWN_OFFSET;
+  const spaceAbove = rect.top - viewportTop - VIEWPORT_MARGIN - DROPDOWN_OFFSET;
+  // 触屏优先在控件下方保留可滚动的选项区，空间不足时才向上展开。
   const direction =
-    spaceBelow >= DROPDOWN_MAX_HEIGHT || spaceBelow >= spaceAbove ? 'down' : 'up';
+    spaceBelow >= (touch ? 160 : DROPDOWN_MAX_HEIGHT) || spaceBelow >= spaceAbove ? 'down' : 'up';
   const maxHeight = Math.max(
     0,
     Math.min(DROPDOWN_MAX_HEIGHT, direction === 'down' ? spaceBelow : spaceAbove)
@@ -88,17 +93,19 @@ const resolveDropdownStyle = (rect: DOMRect, dropdownMinWidth?: number): CSSProp
 
   return direction === 'down'
     ? {
-        position: 'fixed',
-        top: rect.bottom + DROPDOWN_OFFSET,
-        left,
+        // 使用文档坐标，避开 Safari 可视视口平移时 fixed 元素额外偏移。
+        position: 'absolute',
+        top: window.scrollY + rect.bottom + DROPDOWN_OFFSET,
+        left: window.scrollX + left,
         width,
         maxHeight,
         zIndex: DROPDOWN_Z_INDEX
       }
     : {
-        position: 'fixed',
-        bottom: viewportHeight - rect.top + DROPDOWN_OFFSET,
-        left,
+        position: 'absolute',
+        top: window.scrollY + rect.top - DROPDOWN_OFFSET,
+        transform: 'translateY(-100%)',
+        left: window.scrollX + left,
         width,
         maxHeight,
         zIndex: DROPDOWN_Z_INDEX
@@ -137,6 +144,8 @@ export function Select({
   const [dropdownStyle, setDropdownStyle] = useState<CSSProperties | null>(null);
   const isOpen = open && !disabled;
   const searchable = Boolean(search);
+  const touch = useMediaQuery('(pointer: coarse)');
+  const touchSearch = searchable && touch;
   // 搜索只缩小候选项，提交选择后才更新调用方的筛选值。
   const visibleOptions = useMemo(() => {
     const query = searchable ? searchQuery.trim().toLowerCase() : '';
@@ -156,13 +165,13 @@ export function Select({
       if (wrapRef.current?.contains(target) || dropdownRef.current?.contains(target)) return;
       setOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
   }, [disabled, open]);
 
   const updateDropdownStyle = useCallback((rect: DOMRect) => {
-    setDropdownStyle(resolveDropdownStyle(rect, dropdownMinWidth));
-  }, [dropdownMinWidth]);
+    setDropdownStyle(resolveDropdownStyle(rect, dropdownMinWidth, touch));
+  }, [dropdownMinWidth, touch]);
   useAnchorPosition(isOpen, wrapRef, updateDropdownStyle);
 
   const selectedIndex = useMemo(() => options.findIndex((option) => option.value === value), [options, value]);
@@ -182,14 +191,14 @@ export function Select({
     (nextIndex: number) => {
       const nextOption = visibleOptions[nextIndex];
       if (!nextOption || nextOption.disabled) return;
-      // 先保留输入焦点再关闭，避免 onFocus 在选中后重新展开列表。
-      if (searchable) searchInputRef.current?.focus();
-      else triggerRef.current?.focus();
+      // 触屏返回按钮以收起键盘；桌面保留输入焦点，且不滚动页面。
+      if (searchable && !touchSearch) searchInputRef.current?.focus({ preventScroll: true });
+      else triggerRef.current?.focus({ preventScroll: true });
       onChange(nextOption.value);
       setOpen(false);
       setHighlightedIndex(nextIndex);
     },
-    [onChange, searchable, visibleOptions]
+    [onChange, searchable, touchSearch, visibleOptions]
   );
 
   const moveHighlight = useCallback(
@@ -258,25 +267,42 @@ export function Select({
           event.preventDefault();
           // 嵌套在设置弹窗时，Esc 先关闭列表，下一次才交给父弹窗。
           event.stopPropagation();
-          if (searchable) searchInputRef.current?.focus();
-          else triggerRef.current?.focus();
+          if (searchable && !touchSearch) searchInputRef.current?.focus({ preventScroll: true });
+          else triggerRef.current?.focus({ preventScroll: true });
           setOpen(false);
           return;
         case 'Tab':
+          if (touchSearch && isOpen) {
+            if (event.currentTarget === triggerRef.current && !event.shiftKey) {
+              event.preventDefault();
+              searchInputRef.current?.focus({ preventScroll: true });
+              return;
+            }
+            if (editingSearch) {
+              triggerRef.current?.focus({ preventScroll: true });
+              if (event.shiftKey) event.preventDefault();
+            }
+          }
           if (isOpen) setOpen(false);
           return;
         default:
           return;
       }
     },
-    [commitSelection, disabled, isOpen, moveHighlight, openDropdown, searchable, visibleOptions.length, resolvedHighlightedIndex]
+    [commitSelection, disabled, isOpen, moveHighlight, openDropdown, searchable, touchSearch, visibleOptions.length, resolvedHighlightedIndex]
   );
 
   useEffect(() => {
     if (!isOpen || resolvedHighlightedIndex < 0 || !shouldScrollHighlightRef.current) return;
     const highlightedOption = document.getElementById(`${selectId}-option-${resolvedHighlightedIndex}`);
-    highlightedOption?.scrollIntoView({ block: 'nearest' });
-  }, [isOpen, resolvedHighlightedIndex, selectId, visibleOptions]);
+    const viewport = dropdownRef.current?.querySelector<HTMLElement>('[data-menu-scroll-viewport]');
+    if (!highlightedOption || !viewport) return;
+    // 只滚动菜单内部；scrollIntoView 会连带滚动页面，使 iOS 上的锚点跳动。
+    const optionRect = highlightedOption.getBoundingClientRect();
+    const viewportRect = viewport.getBoundingClientRect();
+    if (optionRect.top < viewportRect.top) viewport.scrollTop += optionRect.top - viewportRect.top;
+    else if (optionRect.bottom > viewportRect.bottom) viewport.scrollTop += optionRect.bottom - viewportRect.bottom;
+  }, [dropdownStyle, isOpen, resolvedHighlightedIndex, selectId, visibleOptions]);
 
   const optionButtons = isOpen && visibleOptions.map((opt, index) => {
     const active = opt.value === value;
@@ -311,6 +337,44 @@ export function Select({
     );
   });
 
+  const searchField = search ? (
+    <input
+      ref={searchInputRef}
+      id={touchSearch ? `${selectId}-search` : selectId}
+      className={`${styles.trigger} ${styles.searchInput} ${touchSearch ? styles.touchSearchInput : ''}`}
+      type="text"
+      role="combobox"
+      aria-label={ariaLabel ?? search.placeholder}
+      aria-labelledby={ariaLabelledBy}
+      aria-describedby={ariaDescribedBy}
+      aria-autocomplete="list"
+      aria-expanded={isOpen}
+      aria-controls={isOpen ? listboxId : undefined}
+      aria-activedescendant={isOpen && resolvedHighlightedIndex >= 0 ? `${selectId}-option-${resolvedHighlightedIndex}` : undefined}
+      placeholder={search.placeholder}
+      value={isOpen || touchSearch ? searchQuery : selected?.triggerLabel ?? selected?.label ?? ''}
+      autoComplete="off"
+      autoCapitalize="none"
+      spellCheck={false}
+      disabled={disabled}
+      onFocus={touchSearch ? undefined : openDropdown}
+      onClick={() => {
+        if (!isOpen) openDropdown();
+      }}
+      onChange={(event) => {
+        shouldScrollHighlightRef.current = true;
+        setSearchQuery(event.target.value);
+        setHighlightedIndex(-1);
+        setOpen(true);
+      }}
+      onBlur={(event) => {
+        if (touchSearch && !event.relatedTarget) return;
+        if (!dropdownRef.current?.contains(event.relatedTarget) && !wrapRef.current?.contains(event.relatedTarget)) setOpen(false);
+      }}
+      onKeyDown={handleKeyDown}
+    />
+  ) : null;
+
   const dropdown =
     isOpen && dropdownStyle
       ? (
@@ -322,6 +386,7 @@ export function Select({
             aria-label={searchable ? undefined : ariaLabel}
             style={dropdownStyle}
           >
+            {touchSearch && <div className={styles.touchSearchField}>{searchField}</div>}
             <MenuScrollArea id={searchable ? listboxId : undefined} role={searchable ? 'listbox' : undefined} ariaLabel={searchable ? ariaLabel : undefined}>
               {optionButtons}
             </MenuScrollArea>
@@ -336,42 +401,9 @@ export function Select({
         className={`${styles.wrap} ${fullWidth ? styles.wrapFullWidth : ''} ${className ?? ''}`}
         ref={wrapRef}
       >
-        {search ? (
+        {search && !touchSearch ? (
           <>
-            <input
-              ref={searchInputRef}
-              id={selectId}
-              className={`${styles.trigger} ${styles.searchInput}`}
-              type="text"
-              role="combobox"
-              aria-label={ariaLabel ?? search.placeholder}
-              aria-labelledby={ariaLabelledBy}
-              aria-describedby={ariaDescribedBy}
-              aria-autocomplete="list"
-              aria-expanded={isOpen}
-              aria-controls={isOpen ? listboxId : undefined}
-              aria-activedescendant={isOpen && resolvedHighlightedIndex >= 0 ? `${selectId}-option-${resolvedHighlightedIndex}` : undefined}
-              placeholder={search.placeholder}
-              value={isOpen ? searchQuery : selected?.triggerLabel ?? selected?.label ?? ''}
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              disabled={disabled}
-              onFocus={openDropdown}
-              onClick={() => {
-                if (!isOpen) openDropdown();
-              }}
-              onChange={(event) => {
-                shouldScrollHighlightRef.current = true;
-                setSearchQuery(event.target.value);
-                setHighlightedIndex(-1);
-                setOpen(true);
-              }}
-              onBlur={(event) => {
-                if (!dropdownRef.current?.contains(event.relatedTarget)) setOpen(false);
-              }}
-              onKeyDown={handleKeyDown}
-            />
+            {searchField}
             <span className={`${styles.triggerIcon} ${styles.searchIcon}`} aria-hidden="true">
               <IconChevronDown size={14} />
             </span>
@@ -391,7 +423,7 @@ export function Select({
               ? `${selectId}-option-${resolvedHighlightedIndex}`
               : undefined
           }
-          aria-label={ariaLabel}
+          aria-label={ariaLabel ?? search?.placeholder}
           aria-labelledby={ariaLabelledBy}
           aria-describedby={ariaDescribedBy}
           disabled={disabled}
