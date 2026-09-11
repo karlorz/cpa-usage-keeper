@@ -169,7 +169,10 @@ export function DashboardToolbar<T extends string>({ items, activeId, onNavigate
   useEffect(() => {
     if (!menuOpen) return;
     menuRef.current?.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
-    const onPointer = (event: PointerEvent) => { if (!hostRef.current?.contains(event.target as Node)) setMenuOpen(false); };
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!menuRef.current?.contains(target) && !triggerRef.current?.contains(target)) setMenuOpen(false);
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); setMenuOpen(false); triggerRef.current?.focus(); }
     };
@@ -230,7 +233,10 @@ export function DashboardToolbar<T extends string>({ items, activeId, onNavigate
           const index = choices.indexOf(document.activeElement as HTMLAnchorElement);
           const next = event.key === 'ArrowDown' ? (index + 1) % choices.length : event.key === 'ArrowUp' ? (index + choices.length - 1) % choices.length : event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : -1;
           if (next >= 0) { event.preventDefault(); choices[next]?.focus(); }
-        }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget) && !triggerRef.current?.contains(event.relatedTarget)) setMenuOpen(false); }}>
+        }} onBlur={(event) => {
+          // Safari 触摸可能在 click 前失焦且 relatedTarget 为空；外部点击由 pointerdown 判断。
+          if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget) && !triggerRef.current?.contains(event.relatedTarget)) setMenuOpen(false);
+        }}>
           <MenuScrollArea>
           {items.map((item) => <a key={item.id} role="menuitem" href={item.href} aria-current={item.id === activeId ? 'page' : undefined} onClick={(event) => navigate(event, item.id)} onKeyDown={(event) => {
             if (event.key === ' ') { event.preventDefault(); activatePage(item.id); }

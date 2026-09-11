@@ -69,7 +69,7 @@
 
 .dropdown {
   @include menu.surface;
-  position: fixed;
+  position: absolute;
   max-height: 240px;
   overflow: hidden;
 }
@@ -88,6 +88,32 @@
   &::placeholder {
     color: var(--text-tertiary);
   }
+
+  // iOS 聚焦小于 16px 的输入框会自动放大页面。
+  @media (pointer: coarse) {
+    font-size: 16px;
+  }
+}
+
+.touchSearchField {
+  position: relative;
+  flex-shrink: 0;
+  height: 44px;
+  margin-bottom: 6px;
+}
+
+.touchSearchInput {
+  // 保留 16px 的输入字号避免 iOS 自动缩放，视觉上与 13px 的触发器一致。
+  --search-scale: 0.8125;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(100% / var(--search-scale));
+  height: calc(44px / var(--search-scale));
+  padding: 0 calc(12px / var(--search-scale));
+  border-radius: 999px;
+  transform: scale(var(--search-scale));
+  transform-origin: top left;
 }
 
 .searchIcon {

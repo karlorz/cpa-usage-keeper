@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { ChartData, ChartOptions } from 'chart.js'
+import type { CategoryScaleOptions, ChartData, ChartOptions } from 'chart.js'
 import { Chart } from 'react-chartjs-2'
 import '@/lib/chartjs'
 import quotaCostIcon from '@/assets/icons/quota-cost.svg'
@@ -15,6 +15,7 @@ import type { CodexQuotaHistoryCycle, CodexQuotaHistoryResponse, CodexQuotaHisto
 import { useThemeStore } from '@/stores'
 import { formatCompactNumber, formatUsd } from '@/utils/usage'
 import { buildUsageChartTooltipStyle, getUsageChartTheme, toUsageChartGradientFill, USAGE_CHART_REQUESTS_LINE_COLOR, type UsageChartGradientColor } from '@/utils/usage/chartConfig'
+import { quotaRemainingStatus } from './credentialViewModels'
 import styles from './CodexQuotaHistoryPanel.module.scss'
 
 type QuotaEfficiencyChartType = 'bar' | 'line'
@@ -265,7 +266,7 @@ function CurrentCycleEfficiencyCard({
   return (
     <section className={styles.card} data-codex-quota-current-cycle="true">
       <header className={styles.cardHeader}>
-        <div>
+        <div className={styles.currentCycleHeading}>
           <h3>
             {t('usage_stats.credentials_quota_history_current_title')}
             {window ? ` · ${formatWindowLabel(window, t)}` : ''}
@@ -289,10 +290,21 @@ function CurrentCycleEfficiencyCard({
               : t('usage_stats.credentials_quota_history_no_current')}
           </p>
         </div>
-        {cycle && chart.hasUnavailableCost ? (
-          <small className={styles.costHeaderHint} data-codex-quota-cost-warning="true">
-            {t('usage_stats.credentials_quota_history_cost_unavailable')}
-          </small>
+        {cycle ? (
+          <div className={styles.currentCycleStatus}>
+            <dl className={styles.currentRemaining} data-status={quotaRemainingStatus(cycle.last_remaining_percent)}>
+              <dt>{t('usage_stats.credentials_quota_history_current_remaining')}</dt>
+              <dd>
+                {cycle.last_remaining_percent ?? '—'}
+                {cycle.last_remaining_percent !== null ? <span>%</span> : null}
+              </dd>
+            </dl>
+            {chart.hasUnavailableCost ? (
+              <small className={styles.costHeaderHint} data-codex-quota-cost-warning="true">
+                {t('usage_stats.credentials_quota_history_cost_unavailable')}
+              </small>
+            ) : null}
+          </div>
         ) : null}
       </header>
       {!cycle ? (
@@ -391,7 +403,7 @@ function QuotaSummaryRow({
           label={t('usage_stats.total_cost')}
           value={values.cost}
         />
-      </> : '—'}</dd>
+      </> : <span className={styles.summaryUnavailable}>—</span>}</dd>
     </div>
   )
 }
@@ -834,7 +846,16 @@ function buildEfficiencyChart(
       },
       scales: {
         x: {
-          ticks: { color: muted, font: { size: 10 }, autoSkip: true, maxTicksLimit: 8, maxRotation: 0, minRotation: 0 },
+          afterBuildTicks: (axis) => {
+            const ticks = axis.ticks
+            const options = axis.options as CategoryScaleOptions
+            options.ticks.maxTicksLimit = axis.width >= 560 ? 8 : axis.width >= 200 ? 4 : 3
+            // 首尾作为主刻度优先保留，中间由 Chart.js 根据实际文字宽度均匀抽样。
+            if (ticks.length === 0) return
+            ticks[0].major = true
+            ticks[ticks.length - 1].major = true
+          },
+          ticks: { color: muted, font: { size: 10 }, autoSkip: true, major: { enabled: true }, maxRotation: 0, minRotation: 0 },
           grid: { display: false },
           border: { color: grid },
         },
