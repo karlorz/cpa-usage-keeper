@@ -12,6 +12,11 @@ type staticResponseManagementCaller struct {
 	response *apicall.Response
 }
 
+
+func (c *staticResponseManagementCaller) ResetQuota(context.Context, string) error {
+	return nil
+}
+
 func (c *staticResponseManagementCaller) CallManagementAPI(ctx context.Context, request apicall.Request) (*apicall.Response, error) {
 	c.requests = append(c.requests, request)
 	if c.response == nil {
