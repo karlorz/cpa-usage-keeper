@@ -22,7 +22,7 @@ it('shows cache reach and token cache share using their own denominators', () =>
   expect(html).toContain('—');
 });
 
-it('keeps real zero cache values and missing ratios distinct in the combined chart', () => {
+it('renders a continuous zero-baseline cache rate line when tokens are missing', () => {
   const data = buildRealtimeCacheData([
     { bucket: 'a', input_tokens: 100, cache_read_tokens: 20, cache_creation_tokens: 10, cache_read_rate: 20 },
     { bucket: 'b', input_tokens: 100, cache_read_tokens: 0, cache_creation_tokens: 0, cache_read_rate: 0 },
@@ -31,7 +31,7 @@ it('keeps real zero cache values and missing ratios distinct in the combined cha
   expect(data.datasets[0].data).toEqual([70, 100, 0]);
   expect(data.datasets[1].data).toEqual([20, 0, 0]);
   expect(data.datasets[2].data).toEqual([10, 0, 0]);
-  expect(data.datasets[3].data).toEqual([20, 0, null]);
+  expect(data.datasets[3].data).toEqual([20, 0, 0]);
   expect(data.datasets[3].yAxisID).toBe('rate');
 });
 

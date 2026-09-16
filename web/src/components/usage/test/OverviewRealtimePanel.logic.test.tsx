@@ -233,6 +233,27 @@ describe('OverviewRealtimePanel', () => {
     expect(chartCapture.lineCalls[0].data.datasets[1].data).toEqual([null, 4]);
   });
 
+  it('renders a continuous cache rate line across empty token buckets', () => {
+    renderToStaticMarkup(
+      <OverviewRealtimePanel
+        realtime={{
+          ...realtime,
+          cache_level: [
+            { bucket: '2026-06-09T11:55:00Z', cache_read_rate: 40, cache_read_tokens: 20, cache_creation_tokens: 5, input_tokens: 50 },
+            { bucket: '2026-06-09T11:55:30Z', cache_read_rate: null, cache_read_tokens: 0, cache_creation_tokens: 0, input_tokens: 0 },
+          ],
+        }}
+        loading={false}
+        window="15m"
+        onWindowChange={() => {}}
+        isDark={false}
+        isMobile={false}
+      />
+    );
+
+    expect(chartCapture.chartCalls[2].data.datasets[3].data).toEqual([40, 0]);
+  });
+
   it('shows metric-specific empty states while keeping valid zero lines visible', () => {
     const html = renderToStaticMarkup(
       <OverviewRealtimePanel
