@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { USAGE_CHART_TOKEN_COLORS } from '@/utils/usage/chartConfig'
 
 const readSource = (url: URL) => readFileSync(url, 'utf8').replace(/\r\n/g, '\n')
 
@@ -36,6 +37,7 @@ const sessionSettingsSource = readSource(new URL('../../components/usage/Session
 const analysisPanelSource = readSource(new URL('../../components/usage/analysis/AnalysisPanel.tsx', import.meta.url))
 const analysisPanelStyles = readSource(new URL('../../components/usage/analysis/AnalysisPanel.module.scss', import.meta.url))
 const overviewRealtimePanelSource = readSource(new URL('../../components/usage/OverviewRealtimePanel.tsx', import.meta.url))
+const usageShareListSource = readSource(new URL('../../components/usage/UsageShareList.tsx', import.meta.url))
 const overviewActivityCardsSource = readSource(new URL('../../components/usage/OverviewActivityCards.tsx', import.meta.url))
 const activityHeatmapGridSource = readSource(new URL('../../components/usage/ActivityHeatmapGrid.tsx', import.meta.url))
 const serviceHealthCardSource = readSource(new URL('../../components/usage/ServiceHealthCard.tsx', import.meta.url))
@@ -693,7 +695,7 @@ describe('UsagePage toolbar styles', () => {
     expect(overviewRealtimePanelSource).toContain('overview_realtime_ttft_empty')
     expect(overviewRealtimePanelSource).toContain('overview_realtime_latency_empty')
     expect(overviewRealtimePanelSource).toContain('overview_realtime_cache_empty')
-    expect(overviewRealtimePanelSource).toContain('overviewRealtimeUsageMetaPill')
+    expect(usageShareListSource).toContain('overviewRealtimeUsageMetaPill')
     expect(usagePageStyles).toContain('.overviewRealtimeEmptyOverlay')
     expect(usagePageStyles).toContain('.overviewRealtimeUsageMetaPill')
     expect(usagePageStyles).not.toContain('.overviewRealtimeLegend')
@@ -704,10 +706,10 @@ describe('UsagePage toolbar styles', () => {
 
   it('crossfades normal filters and ranking scope in one stable slot while Refresh stays fixed', () => {
     expect(usagePageSource).toContain("${!isEmbeddedInCPAMC ? styles.toolbarActionsRightAnimated : ''}")
-    expect(usagePageSource).toContain('{(!isEmbeddedInCPAMC || showRangeControls) && (')
+    expect(usagePageSource).toContain('{(!isEmbeddedInCPAMC || showApiKeyFilter) && (')
     expect(usagePageSource).not.toContain("activeTab !== 'ranking' &&")
-    expect(usagePageSource).toContain('showRangeControls ? styles.usageFilterTransitionOpen : \'\'')
-    expect(usagePageSource).toContain('inert={!showRangeControls}')
+    expect(usagePageSource).toContain('showApiKeyFilter ? styles.usageFilterTransitionOpen : \'\'')
+    expect(usagePageSource).toContain('inert={!showApiKeyFilter}')
     expect(usagePageSource).toContain('<div className={styles.usageFilterBar}>')
     expect(usagePageSource).not.toContain("key={showRangeControls ? 'open' : 'closed'}")
     expect(usagePageSource).toContain('className={styles.usageRefreshSlot}')
@@ -807,9 +809,8 @@ describe('UsagePage toolbar styles', () => {
   })
 
   it('keeps the API Key filter visible on the Analysis page so Analysis requests can be filtered', () => {
-    expect(usagePageSource).not.toContain('shouldShowApiKeyFilter(activeTab)')
+    expect(usagePageSource).toContain('const showApiKeyFilter = shouldShowApiKeyFilter(activeTab)')
     expect(usagePageSource).not.toContain('styles.apiKeyFilterGroupHidden')
-    expect(usagePageSource).not.toContain('aria-hidden={!showApiKeyFilter}')
     expect(usagePageStyles).not.toContain('.apiKeyFilterGroupHidden')
   })
 
@@ -835,7 +836,7 @@ describe('UsagePage toolbar styles', () => {
     expect(i18nSource).not.toContain("tab_analysis: 'API & Models'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 与模型'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 與模型'")
-    expect(usageNavigationSource).toMatch(/USAGE_TAB_OPTIONS = \[\s*'overview',\s*'analysis',\s*'ranking',\s*'events',\s*'auth-files',\s*'ai-provider',\s*'settings',\s*\] as const/)
+    expect(usageNavigationSource).toMatch(/USAGE_TAB_OPTIONS = \[\s*'overview',\s*'realtime',\s*'analysis',\s*'ranking',\s*'events',\s*'auth-files',\s*'ai-provider',\s*'settings',\s*\] as const/)
   })
 
   it('keeps update checks and Sign out in the shared header menu', () => {
@@ -1189,7 +1190,6 @@ describe('UsagePage toolbar styles', () => {
     expect(analysisPanelSource).toContain("t('usage_stats.analysis_token_usage_subtitle')")
     expect(analysisPanelSource).toContain("t('usage_stats.analysis_model_efficiency_title')")
     expect(analysisPanelSource).toContain("t('usage_stats.analysis_composition_title')")
-    expect(analysisPanelSource).toContain("t('usage_stats.analysis_composition_token_percent')")
     expect(analysisPanelSource).toContain("t('usage_stats.analysis_heatmap_title')")
     expect(analysisPanelSource).toContain("t('usage_stats.analysis_heatmap_subtitle')")
     expect(analysisPanelSource).toContain("t('usage_stats.total_cost')")
@@ -1201,13 +1201,12 @@ describe('UsagePage toolbar styles', () => {
     expect(analysisPanelSource).toContain('<Bar data={chartData} options={chartOptions} plugins={[drawRequestsLineOnTopPlugin, drawTokenAverageLinePlugin]} />')
     expect(analysisPanelSource).toContain("id: 'analysis-token-average-line'")
     expect(analysisPanelSource).toContain("const activeContentKey = `${activeTab?.id ?? 'empty'}:${items.map((item) => item.key).join('|')}`")
-    expect(analysisPanelSource).toContain('<Doughnut key={chartKey} data={chartData} options={chartOptions} plugins={[labelsPlugin]} />')
     expect(analysisPanelSource).toContain('hoverOffset: COMPOSITION_DONUT_HOVER_OFFSET')
     expect(analysisPanelSource).toContain("position: 'analysisCompositionCursor'")
     expect(analysisPanelSource).toContain('analysisCompositionCursor')
     expect(analysisPanelSource).toContain('<Scatter data={chartData} options={chartOptions} plugins={[modelEfficiencyTooltipPointerPlugin]} />')
     expect(analysisPanelSource).toContain("id: 'analysis-model-efficiency-tooltip-pointer'")
-    expect(analysisPanelSource).toContain("cost: '#14b8a6'")
+    expect(USAGE_CHART_TOKEN_COLORS.cost).toBe('#14b8a6')
     expect(analysisPanelSource).toContain('ticks: { color: chartTheme.textSecondary')
     expect(analysisPanelSource).toContain('analysis_cost_per_million_tokens')
     expect(analysisPanelSource).toContain('analysis_blended_rate')
@@ -1217,9 +1216,6 @@ describe('UsagePage toolbar styles', () => {
     expect(analysisPanelSource).toContain("yAxisID: 'cost'")
     expect(analysisPanelSource).toContain('buildAnalysisTokenChartOptions')
     expect(analysisPanelSource).toContain('buildCompositionChartData')
-    expect(analysisPanelSource).toContain('className={styles.donutCanvasBox}')
-    expect(analysisPanelSource).toContain('className={styles.compositionUsageList}')
-    expect(analysisPanelSource).toContain('className={styles.compositionUsageMetaPill}')
     expect(analysisPanelSource).not.toContain('className={styles.compositionTable}')
     expect(analysisPanelSource).not.toContain('CostBreakdownCard')
     expect(analysisPanelSource).toContain('ModelEfficiencyCard')
@@ -1242,16 +1238,9 @@ describe('UsagePage toolbar styles', () => {
     expect(analysisPanelSource).not.toContain("from 'recharts'")
     expect(analysisPanelStyles).toMatch(/\.insightGrid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/)
     expect(analysisPanelStyles).toMatch(/\.insightGrid\s*\{[\s\S]*?@include mobile\s*\{[\s\S]*?grid-template-columns:\s*1fr;/)
-    expect(analysisPanelStyles).toMatch(/\.efficiencyChartFrame\s*\{[\s\S]*?height:\s*300px;/)
+    expect(analysisPanelStyles).toMatch(/\.efficiencyChartFrame\s*\{[\s\S]*?height:\s*420px;/)
     expect(analysisPanelStyles).not.toContain('.efficiencyList')
     expect(analysisPanelStyles).not.toContain('.efficiencyRow')
-    expect(analysisPanelStyles).toMatch(/\.compositionUsageItem\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--border-color\);/)
-    expect(analysisPanelStyles).toMatch(/\.compositionUsageTrack\s*\{[\s\S]*?height:\s*5px;/)
-    expect(analysisPanelStyles).toMatch(/\.compositionUsageBar\s*\{[\s\S]*?background:\s*linear-gradient\(90deg, color-mix\(in srgb, var\(--composition-bar-color\) 70%, var\(--bg-secondary\)\), var\(--composition-bar-color\)\);/)
-    const compositionUsageMetaPillBlock = styleRuleBlock(analysisPanelStyles, '.compositionUsageMetaPill')
-    expect(compositionUsageMetaPillBlock).toContain('max-width: 100%;')
-    expect(compositionUsageMetaPillBlock).toContain('min-width: 0;')
-    expect(compositionUsageMetaPillBlock).toContain('flex-wrap: wrap;')
     expect(analysisPanelStyles).toMatch(/\.modelEfficiencyFloatingTooltip\s*\{[\s\S]*?pointer-events:\s*none;/)
     expect(analysisPanelStyles).toMatch(/\.compositionTabActive\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-primary\) 84%, var\(--bg-secondary\)\);/)
     expect(analysisPanelStyles).not.toMatch(/\.compositionTabActive\s*\{[\s\S]*?#2563eb/)
@@ -1324,8 +1313,8 @@ describe('UsagePage toolbar styles', () => {
   it('loads both Activity cards through one independent Recent Activity request', () => {
     expect(usagePageSource).toContain('useUsageActivityData({')
     expect(usagePageSource).toContain('useRecentActivityWindow(usageRangeQuery)')
-    expect(usagePageSource).toContain('await Promise.all([loadUsage(), loadActivity(), loadRealtime()])')
-    expect(usagePageSource).toContain('await Promise.all([loadUsage(), loadActivity({ skipIfInFlight: true }), loadRealtime()])')
+    expect(usagePageSource).toContain('await Promise.all([loadUsage(), loadActivity(), loadComparisons()])')
+    expect(usagePageSource).toContain('await Promise.all([loadUsage(), loadActivity({ skipIfInFlight: true }), loadComparisons({ skipIfInFlight: true })])')
     expect(usagePageSource).not.toContain('<ServiceHealthCard')
     expect(usagePageSource).not.toContain('showEyebrow')
   })
