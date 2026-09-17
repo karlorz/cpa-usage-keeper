@@ -220,6 +220,26 @@ func FindUsageIdentityByID(ctx context.Context, db *gorm.DB, id int64) (entities
 	return identity, nil
 }
 
+// FindActiveUsageIdentityByAuthTypeAndIdentity 按页面公开的 auth_index 精确读取可操作身份。
+func FindActiveUsageIdentityByAuthTypeAndIdentity(ctx context.Context, db *gorm.DB, authType entities.UsageIdentityAuthType, identity string) (entities.UsageIdentity, error) {
+	var row entities.UsageIdentity
+	if db == nil {
+		return row, fmt.Errorf("database is nil")
+	}
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return row, fmt.Errorf("usage identity is required")
+	}
+	if err := db.WithContext(ctx).
+		Clauses(dbresolver.Write).
+		Select(usageIdentityReadColumns).
+		Where("auth_type = ? AND identity = ? AND is_deleted = ?", authType, identity, false).
+		First(&row).Error; err != nil {
+		return row, fmt.Errorf("find active usage identity: %w", err)
+	}
+	return row, nil
+}
+
 func UpdateUsageIdentityAlias(ctx context.Context, db *gorm.DB, id int64, alias string) error {
 	if db == nil {
 		return fmt.Errorf("database is nil")
@@ -233,6 +253,28 @@ func UpdateUsageIdentityAlias(ctx context.Context, db *gorm.DB, id int64, alias 
 		Model(&entities.UsageIdentity{}).
 		Where("id = ? AND is_deleted = ?", id, false).
 		Update("alias", value)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// UpdateUsageIdentityDisabled 在上游状态成功后写回 Keeper 的即时状态。
+func UpdateUsageIdentityDisabled(ctx context.Context, db *gorm.DB, authType entities.UsageIdentityAuthType, identity string, disabled bool) error {
+	if db == nil {
+		return fmt.Errorf("database is nil")
+	}
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return fmt.Errorf("usage identity is required")
+	}
+	result := db.WithContext(ctx).
+		Model(&entities.UsageIdentity{}).
+		Where("auth_type = ? AND identity = ? AND is_deleted = ?", authType, identity, false).
+		Update("disabled", disabled)
 	if result.Error != nil {
 		return result.Error
 	}

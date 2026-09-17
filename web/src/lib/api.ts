@@ -797,6 +797,33 @@ export async function setAuthFilesDisabled(names: string[], disabled: boolean): 
   return response.json()
 }
 
+export type CredentialStatusKind = 'auth-file' | 'ai-provider'
+
+export interface CredentialStatusResponse {
+  auth_index: string
+  disabled: boolean
+}
+
+// 认证文件与 AI 供应商共用前端调用形状，由后端按 auth_index 翻译成各自的上游写操作。
+const credentialStatusPathByKind: Record<CredentialStatusKind, string> = {
+  'auth-file': '/auth-files',
+  'ai-provider': '/ai-providers',
+}
+
+export async function setCredentialDisabled(kind: CredentialStatusKind, authIndex: string, disabled: boolean): Promise<CredentialStatusResponse> {
+  const response = await apiFetch(apiPath(`${credentialStatusPathByKind[kind]}/${encodeURIComponent(authIndex)}/status`), {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ disabled }),
+  })
+  if (!response.ok) {
+    await parseApiError(response, `Failed to update credential status: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function deleteAuthFiles(names: string[]): Promise<AuthFilesManagementResponse> {
   const response = await apiFetch(apiPath('/auth-files'), {
     method: 'DELETE',
