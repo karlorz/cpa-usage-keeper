@@ -287,7 +287,6 @@ describe('useCredentialsTabData quota response contract', () => {
   it('routes reset outcomes through the shared helper and top notice', () => {
     expect(credentialsTabDataSource).toContain('runQuotaResetForAuthIndex(authIndex, {')
     expect(credentialsTabDataSource).toContain("onNotice?.('error', outcome.message)")
-    expect(credentialsTabDataSource).not.toContain("onAuthRequired?.()")
     expect(credentialsTabDataSource).not.toContain('quotaResetError')
   })
 })

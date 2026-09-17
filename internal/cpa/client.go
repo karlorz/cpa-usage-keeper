@@ -47,8 +47,10 @@ type RequestLogStream struct {
 }
 
 type authFileStatusRequest struct {
-	Name     string `json:"name"`
-	Disabled bool   `json:"disabled"`
+	Name string `json:"name"`
+	// AuthIndex 只在单条凭证开关时携带；CPA 用它校验同名文件确实指向目标账号，批量接口保持原样。
+	AuthIndex string `json:"auth_index,omitempty"`
+	Disabled  bool   `json:"disabled"`
 }
 
 type authFilesDeleteRequest struct {
@@ -447,12 +449,14 @@ func (c *Client) FetchAuthFiles(ctx context.Context) (*response.AuthFilesResult,
 	return result, nil
 }
 
-func (c *Client) UpdateAuthFileStatus(ctx context.Context, name string, disabled bool) error {
-	_, _, err := c.doManagementJSONRequestWithBody(ctx, http.MethodPatch, cpaManagementAuthFilesStatusEndpoint, authFileStatusRequest{
-		Name:     name,
-		Disabled: disabled,
+// UpdateAuthFileStatus 切换认证文件启用状态；authIndex 为空时退化为 CPA 原有的按文件名定位。
+func (c *Client) UpdateAuthFileStatus(ctx context.Context, name string, authIndex string, disabled bool) (int, error) {
+	statusCode, _, err := c.doManagementJSONRequestWithBody(ctx, http.MethodPatch, cpaManagementAuthFilesStatusEndpoint, authFileStatusRequest{
+		Name:      name,
+		AuthIndex: authIndex,
+		Disabled:  disabled,
 	}, nil, "auth file status")
-	return err
+	return statusCode, err
 }
 
 func (c *Client) DeleteAuthFiles(ctx context.Context, names []string) error {
