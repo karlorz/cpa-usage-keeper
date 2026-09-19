@@ -18,7 +18,7 @@ it('shows cache reach and token cache share using their own denominators', () =>
   const html = renderToStaticMarkup(<><RealtimeWindowCards summary={summary} window="15m" /><RealtimeDiagnostics insights={{summary,outcomes:[]}} labels={[]} isDark={false} isMobile={false} /></>);
   const options=charts.doughnut[0].options as {plugins:{realtimeCacheShareCenter:{value:string}}};
   expect(options.plugins.realtimeCacheShareCenter.value).toBe('40.0%'); // 缓存读取 / Token 构成总量。
-  expect(html).toContain('40.0%'); // 使用缓存的成功请求 / 有 Token 的成功请求。
+  expect(html).toContain('<strong>40.00%</strong>'); // 使用缓存的成功请求 / 有 Token 的成功请求。
   expect(html).toContain('—');
 });
 

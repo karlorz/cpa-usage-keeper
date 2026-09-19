@@ -14,7 +14,7 @@ const FAILURE_COLOR = { base: '#b91c1c', light: '#ef4444' };
 const CACHE_RATE_COLOR = '#14b8a6';
 const FAILURE_RATE_COLOR = '#f97316';
 const ratio = (value: number, denominator: number) => denominator > 0 ? value / denominator * 100 : null;
-const percent = (value: number | null) => value === null ? '—' : `${value.toFixed(1)}%`;
+const percent = (value: number | null, fractionDigits = 1) => value === null ? '—' : `${value.toFixed(fractionDigits)}%`;
 type Translate = (key: string) => string;
 
 interface CacheShareCenterOptions {
@@ -81,7 +81,7 @@ export function RealtimeWindowCards({ summary: s, window }: { summary: RealtimeW
   const cards = [
     { label: 'requests', value: s.requests.toLocaleString(), color: COLORS.input.base },
     { label: 'tokens', value: formatCompactNumber(s.total_tokens), color: COLORS.reasoning.base },
-    { label: 'cache_reach', value: percent(ratio(s.cached_requests, s.token_requests)), color: COLORS.cacheRead.base },
+    { label: 'cache_reach', value: percent(ratio(s.cached_requests, s.token_requests), 2), color: COLORS.cacheRead.base },
     { label: 'cost', value: s.cost === null ? '—' : formatUsd(s.cost), color: COLORS.output.base },
   ];
   return <div className={styles.summaryGrid} data-realtime-summary>
