@@ -50,6 +50,7 @@ type queuedUsageDetail struct {
 	Provider            string          `json:"provider"`
 	Model               string          `json:"model"`
 	Alias               *string         `json:"alias"`
+	ResponseModel       string          `json:"response_model"`
 	ReasoningEffort     string          `json:"reasoning_effort"`
 	ServiceTier         string          `json:"service_tier"`
 	ResponseServiceTier string          `json:"response_service_tier"`
@@ -129,6 +130,7 @@ func (d queuedUsageDetail) toUsageEvent(fetchedAt time.Time) entities.UsageEvent
 		UserAgent:           d.UserAgent,
 		Model:               model,
 		ModelAlias:          trimRedisOptionalString(d.Alias),
+		ResponseModel:       strings.TrimSpace(d.ResponseModel),
 		ReasoningEffort:     strings.TrimSpace(d.ReasoningEffort),
 		ServiceTier:         strings.TrimSpace(d.ServiceTier),
 		ResponseServiceTier: strings.TrimSpace(d.ResponseServiceTier),

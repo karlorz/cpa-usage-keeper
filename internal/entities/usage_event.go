@@ -18,6 +18,7 @@ type UsageEvent struct {
 	UserAgent           *string   `gorm:"column:user_agent"`
 	Model               string    `gorm:"index:idx_usage_events_model"`
 	ModelAlias          *string   `gorm:"column:model_alias"`
+	ResponseModel       string    `gorm:"column:response_model;not null;default:''"`
 	ReasoningEffort     string    `gorm:"column:reasoning_effort;not null;default:''"`
 	ServiceTier         string    `gorm:"column:service_tier;not null;default:''"`
 	ResponseServiceTier string    `gorm:"column:response_service_tier;not null;default:''"`
