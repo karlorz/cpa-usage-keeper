@@ -94,6 +94,7 @@ const AUTO_REFRESH_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const
 
 interface AuthFileCredentialsSectionProps {
   rows: AuthFileCredentialRow[]
+  timeZone?: string
   total: number
   page: number
   totalPages: number
@@ -125,7 +126,7 @@ interface AuthFileCredentialsSectionProps {
   onAfterInvalidAccountAction?: () => Promise<void>
 }
 
-export function AuthFileCredentialsSection({ rows, total, page, totalPages, pageSize, activeOnly, sort, loading, quotaRefreshing, quotaRefreshError, quotaInspectionStatus, quotaInspectionLoading, quotaInspectionStarting, quotaInspectionError, onPageChange, onPageSizeChange, onActiveOnlyChange, onSortChange, onRefreshQuota, onRefreshQuotaForAuthIndex, onResetQuotaForAuthIndex, aliasSavingId, onSaveAlias, onOpenDetails, statusPendingIdentityIds, onToggleStatus, onRefreshInspectionStatus, onStartInspection, onAfterInvalidAccountAction }: AuthFileCredentialsSectionProps) {
+export function AuthFileCredentialsSection({ rows, timeZone, total, page, totalPages, pageSize, activeOnly, sort, loading, quotaRefreshing, quotaRefreshError, quotaInspectionStatus, quotaInspectionLoading, quotaInspectionStarting, quotaInspectionError, onPageChange, onPageSizeChange, onActiveOnlyChange, onSortChange, onRefreshQuota, onRefreshQuotaForAuthIndex, onResetQuotaForAuthIndex, aliasSavingId, onSaveAlias, onOpenDetails, statusPendingIdentityIds, onToggleStatus, onRefreshInspectionStatus, onStartInspection, onAfterInvalidAccountAction }: AuthFileCredentialsSectionProps) {
   const { t } = useTranslation()
   const [inspectionOpen, setInspectionOpen] = useState(false)
   const [quotaUsageMode, setQuotaUsageMode] = useState<QuotaUsageMode>('current')
@@ -352,7 +353,7 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
               <CredentialHealthPanel displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.identity.last_used_at} statsUpdatedAt={row.identity.stats_updated_at} windowCacheReadRate={row.windowCacheReadRate} />
             ) : (
               <div className={styles.credentialQuotaSideWithAction}>
-                <AuthFileQuotaPanel row={row} quotaUsageMode={quotaUsageMode} />
+                <AuthFileQuotaPanel row={row} quotaUsageMode={quotaUsageMode} timeZone={timeZone} />
                 <div className={styles.credentialQuotaActionStack}>
                   {/* reset 按钮只在官方缓存给出可用次数时展示；refresh 始终保留在右侧列居中位置。 */}
                   {resetCredits > 0 && (
@@ -1643,7 +1644,7 @@ function isAuthFileDisplayMode(value: string | null | undefined): value is AuthF
   return value === 'quota' || value === 'health'
 }
 
-export function AuthFileQuotaPanel({ row, quotaUsageMode }: { row: AuthFileCredentialRow; quotaUsageMode: QuotaUsageMode }) {
+export function AuthFileQuotaPanel({ row, quotaUsageMode, timeZone }: { row: AuthFileCredentialRow; quotaUsageMode: QuotaUsageMode; timeZone?: string }) {
   const { t } = useTranslation()
 
   // 限额区域按加载、错误、刷新中、无缓存、可展示数据的顺序降级。
@@ -1673,8 +1674,8 @@ export function AuthFileQuotaPanel({ row, quotaUsageMode }: { row: AuthFileCrede
       <div className={styles.credentialQuotaBars}>
         {/* 只有 canonical Antigravity 组提升为共享标题；其它 provider 继续沿用原始扁平 QuotaBar。 */}
         {authFileQuotaPanelItems(row.displayQuotas).map((item) => item.kind === 'group'
-          ? <AntigravityQuotaGroup key={item.renderKey} group={item} quotaUsageMode={quotaUsageMode} />
-          : <QuotaBar key={item.quota.key} quota={item.quota} quotaUsageMode={quotaUsageMode} tooltipAlignRight={item.tooltipAlignRight} />)}
+          ? <AntigravityQuotaGroup key={item.renderKey} group={item} quotaUsageMode={quotaUsageMode} timeZone={timeZone} />
+          : <QuotaBar key={item.quota.key} quota={item.quota} quotaUsageMode={quotaUsageMode} timeZone={timeZone} tooltipAlignRight={item.tooltipAlignRight} />)}
       </div>
     </div>
   )
@@ -1727,7 +1728,7 @@ function authFileQuotaPanelItems(quotas: DisplayQuota[]): AuthFileQuotaPanelItem
   return items
 }
 
-function AntigravityQuotaGroup({ group, quotaUsageMode }: { group: AntigravityQuotaGroupItem; quotaUsageMode: QuotaUsageMode }) {
+function AntigravityQuotaGroup({ group, quotaUsageMode, timeZone }: { group: AntigravityQuotaGroupItem; quotaUsageMode: QuotaUsageMode; timeZone?: string }) {
   return (
     <div className={styles.credentialQuotaGroupBlock} data-quota-group={group.groupKey}>
       <div className={styles.credentialQuotaGroupHeader}>
@@ -1735,7 +1736,7 @@ function AntigravityQuotaGroup({ group, quotaUsageMode }: { group: AntigravityQu
       </div>
       <div className={styles.credentialQuotaGroupBars}>
         {group.quotas.map((quota) => (
-          <QuotaBar key={quota.key} quota={quota} quotaUsageMode={quotaUsageMode} showGroupMetadata={false} />
+          <QuotaBar key={quota.key} quota={quota} quotaUsageMode={quotaUsageMode} timeZone={timeZone} showGroupMetadata={false} />
         ))}
       </div>
     </div>
@@ -1912,17 +1913,32 @@ function truncateQuotaErrorMessage(value: string): string {
   return `${value.slice(0, QUOTA_ERROR_MESSAGE_MAX_LENGTH).trimEnd()}...`
 }
 
-export function formatQuotaResetLabel(resetAt: string): string {
+export function formatQuotaResetLabel(resetAt: string, timeZone?: string): string {
   const resetTime = new Date(resetAt)
   const resetMs = resetTime.getTime()
   if (!Number.isFinite(resetMs)) {
     return ''
   }
-  const month = String(resetTime.getMonth() + 1).padStart(2, '0')
-  const day = String(resetTime.getDate()).padStart(2, '0')
-  const hour = String(resetTime.getHours()).padStart(2, '0')
-  const minute = String(resetTime.getMinutes()).padStart(2, '0')
-  return `${month}/${day} ${hour}:${minute}`
+  const normalizedTimeZone = timeZone?.trim()
+  if (!normalizedTimeZone || normalizedTimeZone === 'Local') {
+    return ''
+  }
+  try {
+    // resetAt 保留 CPA 给出的绝对时刻，只用 Keeper 项目时区生成墙上时间，避免受浏览器时区影响。
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: normalizedTimeZone,
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(resetTime)
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+    return `${values.month}/${values.day} ${values.hour}:${values.minute}`
+  } catch {
+    // Go 的 Local 或浏览器不认识的 IANA 名称无法可靠映射到 Keeper 墙上时间，隐藏标签而不是猜浏览器时区。
+    return ''
+  }
 }
 
 export function formatQuotaResetDuration(resetAt: string): string {
@@ -1951,7 +1967,6 @@ export function formatQuotaBillingUsageAriaLabel(t: Translate, billingUsage: Non
     remaining: billingUsage.remaining ?? '-',
   })
 }
-
 
 // renderQuotaStateSlot 提取加载/错误/刷新中/无缓存的降级渲染，供 AuthFile 和 Poe quota panel 共用。
 function renderQuotaStateSlot(row: { quotaLoading: boolean; quotaError?: string; refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'; displayQuotas: DisplayQuota[] }, t: TFunction): ReactElement | null {
@@ -2049,13 +2064,13 @@ function PoeQuotaMetric({ quota }: { quota: DisplayQuota }) {
   )
 }
 
-function QuotaBar({ quota, quotaUsageMode, showGroupMetadata = true, tooltipAlignRight = false }: { quota: DisplayQuota; quotaUsageMode: QuotaUsageMode; showGroupMetadata?: boolean; tooltipAlignRight?: boolean }) {
+function QuotaBar({ quota, quotaUsageMode, timeZone, showGroupMetadata = true, tooltipAlignRight = false }: { quota: DisplayQuota; quotaUsageMode: QuotaUsageMode; timeZone?: string; showGroupMetadata?: boolean; tooltipAlignRight?: boolean }) {
   const { t } = useTranslation()
   // 条宽使用剩余额度百分比，颜色跟随剩余风险状态从绿到黄到红。
   const percent = quota.barPercent ?? 0
   const width = `${Math.max(0, Math.min(100, percent))}%`
   const percentLabel = quota.barPercent === null ? '' : `${Math.round(quota.barPercent)}%`
-  const resetLabel = quota.resetText ? formatQuotaResetLabel(quota.resetText) : ''
+  const resetLabel = quota.resetText ? formatQuotaResetLabel(quota.resetText, timeZone) : ''
   const resetDuration = quota.resetText ? formatQuotaResetDuration(quota.resetText) : ''
   const billingUsage = quota.billingUsage
   const windowUsage = billingUsage ? undefined : quotaWindowUsageForMode(quota, quotaUsageMode)
