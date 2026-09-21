@@ -12,7 +12,7 @@ import (
 )
 
 func TestBuildSpendDashboardAggregatesUSDAndPoePoints(t *testing.T) {
-	db := openUsageCostResolverDatabase(t, "spend-test.db")
+	db := openTestDatabase(t)
 	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}, &entities.ModelPriceSetting{}); err != nil {
 		t.Fatalf("AutoMigrate: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestBuildSpendDashboardAggregatesUSDAndPoePoints(t *testing.T) {
 }
 
 func TestBuildSpendDashboardFiltersByAuthIndexAndModel(t *testing.T) {
-	db := openUsageCostResolverDatabase(t, "spend-filter-test.db")
+	db := openTestDatabase(t)
 	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}, &entities.ModelPriceSetting{}); err != nil {
 		t.Fatalf("AutoMigrate: %v", err)
 	}
