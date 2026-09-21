@@ -463,7 +463,7 @@ func TestBuildPricingSyncPreviewOverridesModelsDevCacheForPoePrefixedDeepSeekV4F
 		http.DefaultTransport = transport
 	})
 
-	db := openPricingServiceTestDatabase(t)
+	db := openUsageServiceTestDatabase(t)
 	if err := db.Create(&entities.UsageIdentity{
 		Name:         "poe-lite-dd",
 		AuthType:     entities.UsageIdentityAuthTypeAIProvider,
