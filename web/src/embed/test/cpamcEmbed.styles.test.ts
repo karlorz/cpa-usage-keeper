@@ -14,4 +14,11 @@ describe('CPAMC embed styles', () => {
       expect(selector.trim()).toMatch(/^\.app-frame\[data-embed='cpamc'\](?:\s|$)/);
     }
   });
+
+  it('uses the shared Keeper surface and border variables', () => {
+    expect(styles).toContain('background: var(--bg-secondary);');
+    expect(styles).toContain('var(--border-color)');
+    expect(styles).not.toContain('var(--bg)');
+    expect(styles).not.toContain('var(--border)');
+  });
 });

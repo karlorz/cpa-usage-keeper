@@ -126,6 +126,16 @@ describe('Credential section layout and accessibility', () => {
     expect(credentialStyles).toMatch(/\.credentialRequestBreakdown\s*\{[\s\S]*?white-space:\s*nowrap;/)
   })
 
+  it('uses theme-aware failure colors for quota errors', () => {
+    expect(scssRule(credentialStyles, '.credentialQuotaStateError', 1)).toContain('color: var(--failure-badge-text)')
+    expect(scssRule(credentialStyles, '.credentialInlineError', 1)).toContain('color: var(--failure-badge-text)')
+    expect(scssRule(credentialStyles, '.credentialQuotaErrorSummary')).toContain('color: var(--failure-badge-text)')
+    const code = scssRule(credentialStyles, '.credentialQuotaErrorCode')
+    expect(code).toContain('border: 1px solid var(--failure-badge-border)')
+    expect(code).toContain('background: var(--failure-badge-bg)')
+    expect(code).toContain('color: var(--failure-badge-text)')
+  })
+
   it('scrolls pagination controls on narrow screens and sizes sorting by its content', () => {
     expect(credentialStyles).toMatch(/@include tablet\s*\{[\s\S]*?\.credentialPagination\s*\{[\s\S]*?overflow-x:\s*auto;/)
     expect(credentialStyles).toMatch(/@include tablet\s*\{[\s\S]*?\.credentialPaginationControls\s*\{[\s\S]*?width:\s*max-content;/)

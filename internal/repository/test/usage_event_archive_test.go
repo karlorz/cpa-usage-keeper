@@ -65,11 +65,12 @@ func TestArchiveExpiredUsageEventsPreservesOriginalRowAndHotSequence(t *testing.
 	stream := true
 	statusCode := 429
 	clientIP := "203.0.113.10"
+	parentSessionID := "session-root"
 	ttft := int64(321)
 	events := []entities.UsageEvent{
 		{
 			EventKey: "archive-me", APIGroupKey: "group-a", Provider: "openai", Endpoint: "/v1/responses",
-			AuthType: "oauth", RequestID: "request-a", SessionID: "session-child", ParentSessionID: "session-root", ClientIP: &clientIP, Model: "gpt-5", ResponseModel: "gpt-5.6-luna", ReasoningEffort: "high",
+			AuthType: "oauth", RequestID: "request-a", SessionID: "session-child", ParentSessionID: &parentSessionID, ClientIP: &clientIP, Model: "gpt-5", ResponseModel: "gpt-5.6-luna", ReasoningEffort: "high",
 			ServiceTier: "priority", ResponseServiceTier: "priority", ExecutorType: "codex", Timestamp: now.AddDate(0, 0, -91),
 			Source: "auth-a", AuthIndex: "auth-a", Failed: true, StatusCode: &statusCode, Generate: &generate, Stream: &stream, LatencyMS: 999, TTFTMS: &ttft,
 			InputTokens: 10, OutputTokens: 20, ReasoningTokens: 5, CachedTokens: 4, CacheReadTokens: 3, CacheCreationTokens: 2, TotalTokens: 35,

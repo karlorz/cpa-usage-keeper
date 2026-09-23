@@ -413,6 +413,46 @@ func TestInsertUsageEventsPersistsDuplicateEventKeys(t *testing.T) {
 	}
 }
 
+func TestInsertUsageEventsPersistsNullParentSessionID(t *testing.T) {
+	db := openTestDatabase(t)
+	parentSessionID := "parent-session"
+	events := []entities.UsageEvent{
+		{EventKey: "root-session", SessionID: "root-session", ParentSessionID: nil, Timestamp: time.Date(2026, 9, 22, 9, 0, 0, 0, time.UTC)},
+		{EventKey: "child-session", SessionID: "child-session", ParentSessionID: &parentSessionID, Timestamp: time.Date(2026, 9, 22, 9, 1, 0, 0, time.UTC)},
+	}
+	if _, _, err := repository.InsertUsageEvents(db, events); err != nil {
+		t.Fatalf("InsertUsageEvents returned error: %v", err)
+	}
+
+	rows, err := db.Raw("SELECT event_key, parent_session_id FROM usage_events ORDER BY id").Rows()
+	if err != nil {
+		t.Fatalf("load parent session IDs: %v", err)
+	}
+	defer rows.Close()
+	want := []sql.NullString{{}, {String: parentSessionID, Valid: true}}
+	index := 0
+	for rows.Next() {
+		if index >= len(want) {
+			t.Fatal("unexpected extra usage event")
+		}
+		var eventKey string
+		var parent sql.NullString
+		if err := rows.Scan(&eventKey, &parent); err != nil {
+			t.Fatalf("scan parent session ID: %v", err)
+		}
+		if parent != want[index] {
+			t.Fatalf("event %q parent_session_id = %+v, want %+v", eventKey, parent, want[index])
+		}
+		index++
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate parent session IDs: %v", err)
+	}
+	if index != len(want) {
+		t.Fatalf("persisted usage event count = %d, want %d", index, len(want))
+	}
+}
+
 func TestInsertUsageEventsBatchesLargeInsertSet(t *testing.T) {
 	db := openTestDatabase(t)
 	events := make([]entities.UsageEvent, 0, 300)

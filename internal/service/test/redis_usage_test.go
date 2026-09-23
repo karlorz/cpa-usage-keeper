@@ -49,8 +49,8 @@ func TestDecodeRedisUsageMessageMapsPayloadToUsageEvent(t *testing.T) {
 	if event.Provider != "claude" || event.Endpoint != "/v1/messages" || event.AuthType != "apikey" || event.RequestID != "req-123" {
 		t.Fatalf("unexpected redis identity fields: %+v", event)
 	}
-	if event.SessionID != "session-root" || event.ParentSessionID != "session-parent" {
-		t.Fatalf("unexpected session fields: session_id=%q parent_session_id=%q", event.SessionID, event.ParentSessionID)
+	if event.SessionID != "session-root" || event.ParentSessionID == nil || *event.ParentSessionID != "session-parent" {
+		t.Fatalf("unexpected session fields: session_id=%q parent_session_id=%v", event.SessionID, event.ParentSessionID)
 	}
 	if event.ModelAlias == nil || *event.ModelAlias != "claude-sonnet-alias" {
 		t.Fatalf("expected model alias to decode, got %+v", event.ModelAlias)
@@ -73,6 +73,22 @@ func TestDecodeRedisUsageMessageRequiresRequestID(t *testing.T) {
 	_, _, err := DecodeRedisUsageMessage(`{"latency_ms":-5,"tokens":{"input_tokens":1,"output_tokens":2},"endpoint":"/fallback"}`, time.Date(2026, 4, 27, 8, 0, 0, 0, time.UTC))
 	if err == nil || !strings.Contains(err.Error(), "request_id is required") {
 		t.Fatalf("expected missing request_id error, got %v", err)
+	}
+}
+
+func TestDecodeRedisUsageMessageNormalizesBlankParentSessionIDToNull(t *testing.T) {
+	for _, payload := range []string{
+		`{"request_id":"missing-parent"}`,
+		`{"request_id":"empty-parent","parent_session_id":""}`,
+		`{"request_id":"blank-parent","parent_session_id":"   "}`,
+	} {
+		event, _, err := DecodeRedisUsageMessage(payload, time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC))
+		if err != nil {
+			t.Fatalf("DecodeRedisUsageMessage returned error: %v", err)
+		}
+		if event.ParentSessionID != nil {
+			t.Fatalf("expected blank parent_session_id to normalize to nil, got %q", *event.ParentSessionID)
+		}
 	}
 }
 
