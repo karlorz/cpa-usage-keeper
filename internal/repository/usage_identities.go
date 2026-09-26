@@ -145,6 +145,7 @@ const usageIdentityAggregationColumns = "id, auth_type, identity, total_requests
 const UsageIdentityAggregationBatchSize = 25
 
 const activeAuthFileUsageIdentityLookupBatchSize = 500
+const openAIProviderPriorityUpdateBatchSize = 500
 
 func ListUsageIdentities(ctx context.Context, db *gorm.DB) ([]entities.UsageIdentity, error) {
 	if db == nil {
@@ -282,6 +283,50 @@ func UpdateUsageIdentityDisabled(ctx context.Context, db *gorm.DB, authType enti
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+// UpdateUsageIdentityPriority 在 CPA 回读确认后写入单条凭证的即时优先级。
+func UpdateUsageIdentityPriority(ctx context.Context, db *gorm.DB, authType entities.UsageIdentityAuthType, identity string, priority int) error {
+	if db == nil {
+		return fmt.Errorf("database is nil")
+	}
+	result := db.WithContext(ctx).Model(&entities.UsageIdentity{}).
+		Where("auth_type = ? AND identity = ? AND is_deleted = ?", authType, strings.TrimSpace(identity), false).
+		Update("priority", priority)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// UpdateOpenAIProviderPriority 使用单个事务更新同一 CPA provider 下所有已同步的 key。
+func UpdateOpenAIProviderPriority(ctx context.Context, db *gorm.DB, authIndexes []string, priority int) error {
+	if db == nil {
+		return fmt.Errorf("database is nil")
+	}
+	if len(authIndexes) == 0 {
+		return fmt.Errorf("openai provider auth indexes are required")
+	}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var updated int64
+		for start := 0; start < len(authIndexes); start += openAIProviderPriorityUpdateBatchSize {
+			end := min(start+openAIProviderPriorityUpdateBatchSize, len(authIndexes))
+			result := tx.Model(&entities.UsageIdentity{}).
+				Where("auth_type = ? AND type = ? AND identity IN ? AND is_deleted = ?", entities.UsageIdentityAuthTypeAIProvider, "openai", authIndexes[start:end], false).
+				Update("priority", priority)
+			if result.Error != nil {
+				return result.Error
+			}
+			updated += result.RowsAffected
+		}
+		if updated == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
 }
 
 func ListActiveUsageIdentityTypeCounts(ctx context.Context, db *gorm.DB, request ListUsageIdentitiesPageRequest) ([]dto.UsageIdentityTypeCount, error) {
