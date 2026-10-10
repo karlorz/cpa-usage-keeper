@@ -23,6 +23,7 @@ export interface QuotaBillingUsageDisplay {
 }
 
 export interface DisplayQuota {
+  usageBreakdown?: UsageQuotaRow['usageBreakdown']
   key: string
   label: string
   scope?: string
@@ -261,6 +262,7 @@ function toDisplayQuota(row: UsageQuotaRow): DisplayQuota | undefined {
   }
 
   return {
+    usageBreakdown: row.usageBreakdown,
     key: row.key,
     label,
     scope: row.scope,
@@ -503,7 +505,7 @@ function quotaUsedPercent(percentDisplay: { percent: number | null; kind: Displa
 }
 
 function isDisplayableQuota(quota: DisplayQuota | undefined): quota is DisplayQuota {
-  return quota !== undefined && quota.barPercent !== null
+  return quota !== undefined && (quota.barPercent !== null || Boolean(quota.usageBreakdown?.length))
 }
 
 // isDisplayableQuotaOrPoe 对 Poe number-forward 行放行（无水位条，仅展示数值与授予计划）。
