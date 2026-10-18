@@ -90,9 +90,9 @@ func TestReleaseChannelPolicy(t *testing.T) {
 	git("-C", repo, "push", "origin", "main", "release/v1", "next")
 
 	for _, tc := range []struct {
-		name, tag, commit, event, head, ref, missingBranch string
-		annotated, pass                                    bool
-		latest, formula                                    string
+		name, tag, commit, event, head, ref, missingBranch, repository string
+		annotated, pass                                                bool
+		latest, formula                                                string
 	}{
 		{name: "v1", tag: "v1.15.12", commit: v1, pass: true, latest: "false", formula: "cpa-usage-keeper@1"},
 		{name: "v2 annotated", tag: "v2.0.0", commit: main, annotated: true, pass: true, latest: "true", formula: "cpa-usage-keeper"},
@@ -111,6 +111,16 @@ func TestReleaseChannelPolicy(t *testing.T) {
 		{name: "incomplete version", tag: "v2.0", commit: main},
 		{name: "prerelease is not stable", tag: "v2.0.0-rc.1", commit: main},
 		{name: "leading zero", tag: "v01.0.0", commit: main},
+		// karlorz fork: train tags vX.Y.Z-N on main, v1 included, Latest follows main.
+		{name: "fork v1 train on main", tag: "v1.15.11-3", commit: main, repository: "karlorz/cpa-usage-keeper", pass: true, latest: "true", formula: "cpa-usage-keeper@1"},
+		{name: "fork stable v1 on main", tag: "v1.15.16", commit: main, repository: "karlorz/cpa-usage-keeper", pass: true, latest: "true", formula: "cpa-usage-keeper@1"},
+		{name: "fork v2 train annotated", tag: "v2.0.7-0", commit: main, annotated: true, repository: "karlorz/cpa-usage-keeper", pass: true, latest: "true", formula: "cpa-usage-keeper"},
+		{name: "fork train on next", tag: "v1.15.11-4", commit: next, repository: "karlorz/cpa-usage-keeper"},
+		{name: "fork train on v1 only", tag: "v1.15.11-5", commit: v1, repository: "karlorz/cpa-usage-keeper"},
+		{name: "fork rc rejected", tag: "v2.0.8-rc.1", commit: main, repository: "karlorz/cpa-usage-keeper"},
+		{name: "fork leading zero train", tag: "v2.0.9-01", commit: main, repository: "karlorz/cpa-usage-keeper"},
+		{name: "upstream rejects train", tag: "v2.0.10-0", commit: main, repository: "Willxup/cpa-usage-keeper"},
+		{name: "upstream v1 on release/v1", tag: "v1.15.17", commit: v1, repository: "Willxup/cpa-usage-keeper", pass: true, latest: "false", formula: "cpa-usage-keeper@1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.annotated {
@@ -137,7 +147,7 @@ func TestReleaseChannelPolicy(t *testing.T) {
 			cmd := exec.Command(bash, "-e", "-c", script)
 			cmd.Dir = repo
 			cmd.Env = append(os.Environ(), "GITHUB_REF_NAME="+tc.tag, "GITHUB_REF="+ref,
-				"GITHUB_SHA="+event, "GITHUB_OUTPUT="+filepath.ToSlash(outputPath),
+				"GITHUB_SHA="+event, "GITHUB_OUTPUT="+filepath.ToSlash(outputPath), "GITHUB_REPOSITORY="+tc.repository,
 				"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
 			output, err := cmd.CombinedOutput()
 			if (err == nil) != tc.pass {

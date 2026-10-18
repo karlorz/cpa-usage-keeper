@@ -30,9 +30,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # karlorz fork patch: fork releases use train tags vX.Y.Z-N (N = fork
+          # build on upstream vX.Y.Z) cut from main; the fork has no release/v1.
+          # Upstream (Willxup/cpa-usage-keeper) keeps the original stable-only policy.
+          fork=false
+          if [[ -n "${GITHUB_REPOSITORY:-}" && "${GITHUB_REPOSITORY}" != "Willxup/cpa-usage-keeper" ]]; then
+            fork=true
+          fi
+          tag_re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [[ "${fork}" == true ]]; then
+            tag_re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*))?$'
+          fi
           if [[ "${GITHUB_REF}" != "refs/tags/${GITHUB_REF_NAME}" ||
-                ! "${GITHUB_REF_NAME}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "Release publishing requires a stable vMAJOR.MINOR.PATCH tag." >&2
+                ! "${GITHUB_REF_NAME}" =~ ${tag_re} ]]; then
+            echo "Release publishing requires a stable vMAJOR.MINOR.PATCH tag (fork: optional -N train)." >&2
             exit 1
           fi
 
@@ -41,9 +52,11 @@ jobs:
           latest=true
           formula=cpa-usage-keeper
           if [[ "${major}" == 1 ]]; then
-            branch=release/v1
-            latest=false
             formula=cpa-usage-keeper@1
+            if [[ "${fork}" != true ]]; then
+              branch=release/v1
+              latest=false
+            fi
           fi
 
           # Tags have no source branch. Require the tagged commit to be in the
