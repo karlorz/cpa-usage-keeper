@@ -264,6 +264,8 @@ jobs:
             dist/checksums.txt
 
   update-homebrew-tap:
+    # karlorz fork patch: the tap and download URLs belong to Willxup; forks skip it.
+    if: github.repository == 'Willxup/cpa-usage-keeper'
     runs-on: ubuntu-24.04
     needs: [release-policy, publish-release]
     steps:

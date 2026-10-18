@@ -32,9 +32,11 @@ jobs:
           set -euo pipefail
           # karlorz fork patch: fork releases use train tags vX.Y.Z-N (N = fork
           # build on upstream vX.Y.Z) cut from main; the fork has no release/v1.
-          # Upstream (Willxup/cpa-usage-keeper) keeps the original stable-only policy.
+          # Every other repository (incl. upstream Willxup) keeps the stable-only policy.
           fork=false
-          if [[ -n "${GITHUB_REPOSITORY:-}" && "${GITHUB_REPOSITORY}" != "Willxup/cpa-usage-keeper" ]]; then
+          repo_lc="${GITHUB_REPOSITORY:-}"
+          repo_lc="${repo_lc,,}"
+          if [[ "${repo_lc}" == "karlorz/cpa-usage-keeper" ]]; then
             fork=true
           fi
           tag_re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'

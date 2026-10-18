@@ -120,6 +120,10 @@ func TestReleaseChannelPolicy(t *testing.T) {
 		{name: "fork rc rejected", tag: "v2.0.8-rc.1", commit: main, repository: "karlorz/cpa-usage-keeper"},
 		{name: "fork leading zero train", tag: "v2.0.9-01", commit: main, repository: "karlorz/cpa-usage-keeper"},
 		{name: "upstream rejects train", tag: "v2.0.10-0", commit: main, repository: "Willxup/cpa-usage-keeper"},
+		{name: "fork train without release/v1", tag: "v1.15.11-6", commit: main, repository: "karlorz/cpa-usage-keeper", missingBranch: "release/v1", pass: true, latest: "true", formula: "cpa-usage-keeper@1"},
+		{name: "fork name case-insensitive", tag: "v1.15.11-7", commit: main, repository: "KarlOrz/CPA-Usage-Keeper", pass: true, latest: "true", formula: "cpa-usage-keeper@1"},
+		{name: "other repo keeps stable policy", tag: "v2.0.11-0", commit: main, repository: "someone/other"},
+		{name: "upstream caps keeps stable policy", tag: "v2.0.12-0", commit: main, repository: "WILLXUP/cpa-usage-keeper"},
 		{name: "upstream v1 on release/v1", tag: "v1.15.17", commit: v1, repository: "Willxup/cpa-usage-keeper", pass: true, latest: "false", formula: "cpa-usage-keeper@1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -280,5 +284,26 @@ func TestHomebrewReleaseUpdatePreservesFormulaSettings(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHomebrewTapSkippedOnForks(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "..", ".github", "workflows", "binary-release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			If string `yaml:"if"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(content, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	if got := workflow.Jobs["update-homebrew-tap"].If; got != "github.repository == 'Willxup/cpa-usage-keeper'" {
+		t.Fatalf("update-homebrew-tap must only run on upstream, got if=%q", got)
+	}
+	if workflow.Jobs["publish-release"].If != "" {
+		t.Fatal("publish-release must still run on forks")
 	}
 }
