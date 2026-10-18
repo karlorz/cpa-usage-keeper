@@ -1,0 +1,83 @@
+name: Validate release branch
+
+on:
+  workflow_call:
+    outputs:
+      latest:
+        description: Whether this release updates the default stable channel
+        value: ${{ jobs.validate.outputs.latest }}
+      formula:
+        description: Homebrew formula for this release line
+        value: ${{ jobs.validate.outputs.formula }}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      latest: ${{ steps.policy.outputs.latest }}
+      formula: ${{ steps.policy.outputs.formula }}
+    steps:
+      - name: Checkout tagged commit and branch history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag and source branch
+        id: policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          # karlorz fork patch: fork releases use train tags vX.Y.Z-N (N = fork
+          # build on upstream vX.Y.Z) cut from main; the fork has no release/v1.
+          # Every other repository (incl. upstream Willxup) keeps the stable-only policy.
+          fork=false
+          # tr instead of ${var,,}: the policy test also runs under macOS bash 3.2.
+          repo_lc="$(printf '%s' "${GITHUB_REPOSITORY:-}" | tr '[:upper:]' '[:lower:]')"
+          if [[ "${repo_lc}" == "karlorz/cpa-usage-keeper" ]]; then
+            fork=true
+          fi
+          tag_re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [[ "${fork}" == true ]]; then
+            tag_re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*))?$'
+          fi
+          if [[ "${GITHUB_REF}" != "refs/tags/${GITHUB_REF_NAME}" ||
+                ! "${GITHUB_REF_NAME}" =~ ${tag_re} ]]; then
+            echo "Release publishing requires a stable vMAJOR.MINOR.PATCH tag (fork: optional -N train)." >&2
+            exit 1
+          fi
+
+          major="${BASH_REMATCH[1]}"
+          branch=main
+          latest=true
+          formula=cpa-usage-keeper
+          if [[ "${major}" == 1 ]]; then
+            formula=cpa-usage-keeper@1
+            if [[ "${fork}" != true ]]; then
+              branch=release/v1
+              latest=false
+            fi
+          fi
+
+          # Tags have no source branch. Require the tagged commit to be in the
+          # selected remote branch's history, including annotated tags.
+          git fetch --no-tags origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
+          tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"
+          event_commit="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+          if [[ "${tag_commit}" != "${event_commit}" ||
+                "$(git rev-parse HEAD)" != "${event_commit}" ]]; then
+            echo "The checked-out commit does not match the triggering tag." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${tag_commit}" "refs/remotes/origin/${branch}"; then
+            echo "${GITHUB_REF_NAME} must point to a commit on ${branch}." >&2
+            exit 1
+          fi
+
+          {
+            echo "latest=${latest}"
+            echo "formula=${formula}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "Validated ${GITHUB_REF_NAME} on ${branch}; Homebrew formula: ${formula}"
