@@ -34,8 +34,8 @@ jobs:
           # build on upstream vX.Y.Z) cut from main; the fork has no release/v1.
           # Every other repository (incl. upstream Willxup) keeps the stable-only policy.
           fork=false
-          repo_lc="${GITHUB_REPOSITORY:-}"
-          repo_lc="${repo_lc,,}"
+          # tr instead of ${var,,}: the policy test also runs under macOS bash 3.2.
+          repo_lc="$(printf '%s' "${GITHUB_REPOSITORY:-}" | tr '[:upper:]' '[:lower:]')"
           if [[ "${repo_lc}" == "karlorz/cpa-usage-keeper" ]]; then
             fork=true
           fi
