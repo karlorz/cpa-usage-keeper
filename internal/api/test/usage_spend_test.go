@@ -92,3 +92,20 @@ func TestUsageSpendRouteHandlesMissingProviderGracefully(t *testing.T) {
 		t.Fatalf("expected empty rows payload, got %s", response.Body.String())
 	}
 }
+
+func TestUsageSpendRouteReportsPoeHistoryExclusion(t *testing.T) {
+	provider := &spendRouteStub{dashboard: &servicedto.SpendDashboard{Rows: []servicedto.SpendRow{}, PoeHistoryExcluded: true}}
+	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/usage/spend?range=7d", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["poe_history_excluded"] != true {
+		t.Fatalf("expected poe_history_excluded=true, got %v", body)
+	}
+}

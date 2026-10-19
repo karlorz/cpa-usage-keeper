@@ -13,6 +13,8 @@ import (
 
 type spendDashboardResponse struct {
 	Rows []spendDashboardRowResponse `json:"rows"`
+	// PoeHistoryExcluded 为 true 时 Poe points_history 因选中 API Key 未计入（其无 API Key 归属）。
+	PoeHistoryExcluded bool `json:"poe_history_excluded,omitempty"`
 }
 
 type spendDashboardRowResponse struct {
@@ -55,8 +57,11 @@ func registerUsageSpendRoute(router gin.IRoutes, usageProvider service.UsageProv
 }
 
 func buildSpendDashboardPayload(dashboard *servicedto.SpendDashboard) spendDashboardResponse {
-	if dashboard == nil || len(dashboard.Rows) == 0 {
+	if dashboard == nil {
 		return spendDashboardResponse{Rows: []spendDashboardRowResponse{}}
+	}
+	if len(dashboard.Rows) == 0 {
+		return spendDashboardResponse{Rows: []spendDashboardRowResponse{}, PoeHistoryExcluded: dashboard.PoeHistoryExcluded}
 	}
 	rows := make([]spendDashboardRowResponse, 0, len(dashboard.Rows))
 	for _, r := range dashboard.Rows {
@@ -68,5 +73,5 @@ func buildSpendDashboardPayload(dashboard *servicedto.SpendDashboard) spendDashb
 			PointsSpent: r.PointsSpent,
 		})
 	}
-	return spendDashboardResponse{Rows: rows}
+	return spendDashboardResponse{Rows: rows, PoeHistoryExcluded: dashboard.PoeHistoryExcluded}
 }

@@ -208,3 +208,118 @@ func TestBuildSpendDashboardHonorsExclusiveCustomEnd(t *testing.T) {
 		t.Fatal("expected spend rows for the selected day")
 	}
 }
+
+// Issue: Poe-prefixed CPA model names must merge with the unprefixed Poe bot_name instead of double-counting USD.
+func TestBuildSpendDashboardMergesPoePrefixedModelWithoutDoubleCountingUSD(t *testing.T) {
+	db := openTestDatabase(t)
+	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}, &entities.UsageIdentity{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	if err := db.Create(&entities.UsageIdentity{
+		Name: "poe-dd", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey",
+		Identity: "auth-poe", Type: "openai", Provider: "poe", Prefix: "dd",
+	}).Error; err != nil {
+		t.Fatalf("seed poe identity: %v", err)
+	}
+	day := time.Date(2026, 10, 17, 0, 0, 0, 0, time.Local)
+	stored := 3.0
+	unavailable := int64(0)
+	if err := db.Create(&entities.UsageOverviewDailyStat{BucketStart: day, APIGroupKey: "key-1", Model: "dd/deepseek-v4-flash", AuthIndex: "auth-poe", RequestCount: 2, CostUSD: &stored, UnavailableCostCount: &unavailable}).Error; err != nil {
+		t.Fatalf("seed daily stat: %v", err)
+	}
+	points1, usd1 := 1000.0, 2.0
+	points2, usd2 := 500.0, 1.0
+	for index, rec := range []entities.PoePointsHistory{
+		{QueryID: "q-1", AuthIndex: "auth-poe", BotName: "DeepSeek-V4-Flash", CostPoints: &points1, CostUSD: &usd1, ObservedAt: day.Add(time.Hour)},
+		{QueryID: "q-2", AuthIndex: "auth-poe", BotName: "deepseek-v4-flash", CostPoints: &points2, CostUSD: &usd2, ObservedAt: day.Add(2 * time.Hour)},
+	} {
+		if err := db.Create(&rec).Error; err != nil {
+			t.Fatalf("seed poe history %d: %v", index, err)
+		}
+	}
+	start, end := day, day.AddDate(0, 0, 1)
+	dashboard, err := repository.BuildSpendDashboard(context.Background(), db, repodto.UsageQueryFilter{StartTime: &start, EndTime: &end, EndExclusive: true})
+	if err != nil {
+		t.Fatalf("BuildSpendDashboard: %v", err)
+	}
+	if len(dashboard.Rows) != 1 {
+		t.Fatalf("expected prefixed usage and Poe rows to merge into one row, got %+v", dashboard.Rows)
+	}
+	row := dashboard.Rows[0]
+	if row.Model != "dd/deepseek-v4-flash" || row.USDSpent != 3.0 || row.PointsSpent != 1500 {
+		t.Fatalf("expected stored $3 (no Poe USD added) and 1500 points on the CPA model row, got %+v", row)
+	}
+	if dashboard.PoeHistoryExcluded {
+		t.Fatal("poe history must be included without an API key filter")
+	}
+
+	// Model filter given as the CPA prefixed name still finds Poe history.
+	filtered, err := repository.BuildSpendDashboard(context.Background(), db, repodto.UsageQueryFilter{StartTime: &start, EndTime: &end, EndExclusive: true, Model: "dd/deepseek-v4-flash"})
+	if err != nil || len(filtered.Rows) != 1 || filtered.Rows[0].PointsSpent != 1500 {
+		t.Fatalf("prefixed model filter lost Poe history: %+v err=%v", filtered, err)
+	}
+}
+
+// Without a priced usage row, Poe-reported USD from every Poe record for that model/day is used (not only the first).
+func TestBuildSpendDashboardFallsBackToAllPoeUSDWhenUsageUnpriced(t *testing.T) {
+	db := openTestDatabase(t)
+	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}, &entities.UsageIdentity{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	day := time.Date(2026, 10, 17, 0, 0, 0, 0, time.Local)
+	zero := 0.0
+	unavailable := int64(2)
+	if err := db.Create(&entities.UsageOverviewDailyStat{BucketStart: day, APIGroupKey: "key-1", Model: "bot-1", AuthIndex: "auth-a", RequestCount: 2, CostUSD: &zero, UnavailableCostCount: &unavailable}).Error; err != nil {
+		t.Fatalf("seed daily stat: %v", err)
+	}
+	usd1, usd2 := 0.25, 0.75
+	for index, rec := range []entities.PoePointsHistory{
+		{QueryID: "q-1", AuthIndex: "auth-a", BotName: "bot-1", CostUSD: &usd1, ObservedAt: day.Add(time.Hour)},
+		{QueryID: "q-2", AuthIndex: "auth-a", BotName: "BOT-1", CostUSD: &usd2, ObservedAt: day.Add(2 * time.Hour)},
+	} {
+		if err := db.Create(&rec).Error; err != nil {
+			t.Fatalf("seed poe history %d: %v", index, err)
+		}
+	}
+	start, end := day, day.AddDate(0, 0, 1)
+	dashboard, err := repository.BuildSpendDashboard(context.Background(), db, repodto.UsageQueryFilter{StartTime: &start, EndTime: &end, EndExclusive: true})
+	if err != nil {
+		t.Fatalf("BuildSpendDashboard: %v", err)
+	}
+	if len(dashboard.Rows) != 1 || dashboard.Rows[0].USDSpent != 1.0 {
+		t.Fatalf("expected Poe USD fallback $1.00 for unpriced usage, got %+v", dashboard.Rows)
+	}
+}
+
+// Issue: selecting an API key must not mix in account-wide Poe history (it has no API key attribution).
+func TestBuildSpendDashboardExcludesPoeHistoryForAPIKeyFilter(t *testing.T) {
+	db := openTestDatabase(t)
+	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}, &entities.UsageIdentity{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	day := time.Date(2026, 10, 17, 0, 0, 0, 0, time.Local)
+	cost1, cost2 := 1.0, 4.0
+	for _, stat := range []entities.UsageOverviewDailyStat{
+		{BucketStart: day, APIGroupKey: "key-1", Model: "model-a", AuthIndex: "auth-a", RequestCount: 1, CostUSD: &cost1},
+		{BucketStart: day, APIGroupKey: "key-2", Model: "model-a", AuthIndex: "auth-a", RequestCount: 1, CostUSD: &cost2},
+	} {
+		if err := db.Create(&stat).Error; err != nil {
+			t.Fatalf("seed daily stat: %v", err)
+		}
+	}
+	points, usd := 900.0, 9.0
+	if err := db.Create(&entities.PoePointsHistory{QueryID: "q-1", AuthIndex: "auth-a", BotName: "other-bot", CostPoints: &points, CostUSD: &usd, ObservedAt: day.Add(time.Hour)}).Error; err != nil {
+		t.Fatalf("seed poe history: %v", err)
+	}
+	start, end := day, day.AddDate(0, 0, 1)
+	dashboard, err := repository.BuildSpendDashboard(context.Background(), db, repodto.UsageQueryFilter{StartTime: &start, EndTime: &end, EndExclusive: true, APIGroupKey: "key-1"})
+	if err != nil {
+		t.Fatalf("BuildSpendDashboard: %v", err)
+	}
+	if !dashboard.PoeHistoryExcluded {
+		t.Fatal("expected PoeHistoryExcluded for API key filter")
+	}
+	if len(dashboard.Rows) != 1 || dashboard.Rows[0].USDSpent != 1.0 || dashboard.Rows[0].PointsSpent != 0 {
+		t.Fatalf("expected only key-1 stored USD and no Poe points, got %+v", dashboard.Rows)
+	}
+}

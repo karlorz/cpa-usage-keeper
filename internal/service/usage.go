@@ -824,7 +824,8 @@ func (s *usageService) GetSpendDashboard(ctx context.Context, filter servicedto.
 		})
 	}
 	return &servicedto.SpendDashboard{
-		Rows: rows,
+		Rows:               rows,
+		PoeHistoryExcluded: record.PoeHistoryExcluded,
 	}, nil
 }
 
