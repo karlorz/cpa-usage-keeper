@@ -237,7 +237,6 @@ func TestPoePointsHistoryRunnerPollsAndUpserts(t *testing.T) {
 	}}
 
 	service := quota.NewServiceWithOptions(db, caller, quota.ServiceOptions{
-		PricingCatalog:               emptyPricingCatalogForTest(),
 		PoePointsHistoryPollInterval: 10 * time.Millisecond,
 	})
 	defer service.StopRefreshTasks()
@@ -288,7 +287,6 @@ func TestPoePointsHistoryRunnerRequestHeadersAndAuth(t *testing.T) {
 	}
 
 	service := quota.NewServiceWithOptions(db, caller, quota.ServiceOptions{
-		PricingCatalog:               emptyPricingCatalogForTest(),
 		PoePointsHistoryPollInterval: 10 * time.Millisecond,
 	})
 	defer service.StopRefreshTasks()
@@ -342,7 +340,6 @@ func TestPoePointsHistoryRunnerHTTPErrorHandling(t *testing.T) {
 	}
 
 	service := quota.NewServiceWithOptions(db, caller, quota.ServiceOptions{
-		PricingCatalog:               emptyPricingCatalogForTest(),
 		PoePointsHistoryPollInterval: 10 * time.Millisecond,
 	})
 	defer service.StopRefreshTasks()

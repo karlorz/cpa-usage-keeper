@@ -248,6 +248,7 @@ func TestHomebrewReleaseUpdatePreservesFormulaSettings(t *testing.T) {
 				for _, arch := range []string{"arm64", "amd64"} {
 					content += fmt.Sprintf("  url \"https://github.com/Willxup/cpa-usage-keeper/releases/download/v1.15.11/cpa-usage-keeper_v1.15.11_darwin_%s.tar.gz\"\n  sha256 \"%s\"\n", arch, strings.Repeat("a", 64))
 				}
+				content += `  bin.install "cpa-usage-keeper"` + "\n"
 				content += fmt.Sprintf("# Preserve installation and service configuration\nrun [opt_bin/\"cpa-usage-keeper\", \"--env\", etc/\"%s.env\"]\n", formula)
 				originals[formula] = content
 				if err := os.WriteFile(filepath.Join(dir, formula+".rb"), []byte(content), 0o644); err != nil {
@@ -305,5 +306,47 @@ func TestHomebrewTapSkippedOnForks(t *testing.T) {
 	}
 	if workflow.Jobs["publish-release"].If != "" {
 		t.Fatal("publish-release must still run on forks")
+	}
+}
+
+func TestReleaseVersionFileRemainsV2Only(t *testing.T) {
+	script := channelScript(t, "binary-release.yml", "publish-release", "Generate release version file")
+	for _, tag := range []string{"v1.15.12", "v2.0.0", "v2.1.3", "v2.0.0-rc.1", "v3.0.0", "v4.0.0"} {
+		t.Run(tag, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.Mkdir(filepath.Join(root, "dist"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			outputPath := filepath.Join(root, "outputs")
+			cmd := exec.Command("bash", "-e", "-c", script)
+			cmd.Dir = root
+			cmd.Env = append(os.Environ(), "RELEASE_TAG="+tag, "GITHUB_OUTPUT="+filepath.ToSlash(outputPath))
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("generate version: %v\n%s", err, output)
+			}
+			data, err := os.ReadFile(filepath.Join(root, "dist", "version.txt"))
+			want := tag == "v2.0.0" || tag == "v2.1.3"
+			if want {
+				if err != nil || string(data) != tag+"\n" {
+					t.Fatalf("version file=%q err=%v", data, err)
+				}
+				output, err := os.ReadFile(outputPath)
+				if err != nil || string(output) != "path=dist/version.txt\n" {
+					t.Fatalf("version asset output=%q err=%v", output, err)
+				}
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("unexpected version file for %s: %v", tag, err)
+			}
+		})
+	}
+	workflow := readChannelWorkflow(t, "binary-release.yml")
+	uploaded := false
+	for _, step := range workflow.Jobs["publish-release"].Steps {
+		if step.Uses == "softprops/action-gh-release@v3" && strings.Contains(step.With["files"], "${{ steps.version_file.outputs.path }}") {
+			uploaded = true
+		}
+	}
+	if !uploaded {
+		t.Fatal("release must upload the generated v2 version asset")
 	}
 }

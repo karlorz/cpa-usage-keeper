@@ -13,7 +13,7 @@ import (
 
 func TestBuildSpendDashboardAggregatesUSDAndPoePoints(t *testing.T) {
 	db := openTestDatabase(t)
-	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}, &entities.ModelPriceSetting{}); err != nil {
+	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}); err != nil {
 		t.Fatalf("AutoMigrate: %v", err)
 	}
 
@@ -21,14 +21,9 @@ func TestBuildSpendDashboardAggregatesUSDAndPoePoints(t *testing.T) {
 	day1 := time.Date(2026, 8, 26, 0, 0, 0, 0, time.Local)
 	day2 := time.Date(2026, 8, 27, 0, 0, 0, 0, time.Local)
 
-	// Set up pricing for model-a
-	if _, err := repository.UpsertModelPriceSetting(db, repodto.ModelPriceSettingInput{
-		Model:                "model-a",
-		PromptPricePer1M:     10.0,
-		CompletionPricePer1M: 20.0,
-	}); err != nil {
-		t.Fatalf("seed pricing: %v", err)
-	}
+	// v2: 消费看板读取日桶已存 cost_usd，不再按当前价格重算。
+	storedCost1 := 20.0
+	storedCost2 := 10.0
 
 	// 1. Seed UsageOverviewDailyStat rows (contributes USD spent)
 	dailyStats := []entities.UsageOverviewDailyStat{
@@ -41,6 +36,7 @@ func TestBuildSpendDashboardAggregatesUSDAndPoePoints(t *testing.T) {
 			OutputTokens: 500_000,   // 10 USD -> Total 20 USD
 			TotalTokens:  1_500_000,
 			RequestCount: 10,
+			CostUSD:      &storedCost1,
 		},
 		{
 			BucketStart:  day2,
@@ -51,6 +47,7 @@ func TestBuildSpendDashboardAggregatesUSDAndPoePoints(t *testing.T) {
 			OutputTokens: 250_000, // 5 USD -> Total 10 USD
 			TotalTokens:  750_000,
 			RequestCount: 5,
+			CostUSD:      &storedCost2,
 		},
 	}
 	for _, stat := range dailyStats {
@@ -93,14 +90,12 @@ func TestBuildSpendDashboardAggregatesUSDAndPoePoints(t *testing.T) {
 		}
 	}
 
-	resolver := newUsageCostResolverForTest(t, db)
-
 	start := day1
 	end := now
 	dashboard, err := repository.BuildSpendDashboard(context.Background(), db, repodto.UsageQueryFilter{
 		StartTime: &start,
 		EndTime:   &end,
-	}, resolver)
+	})
 	if err != nil {
 		t.Fatalf("BuildSpendDashboard error: %v", err)
 	}
@@ -140,7 +135,7 @@ func TestBuildSpendDashboardAggregatesUSDAndPoePoints(t *testing.T) {
 
 func TestBuildSpendDashboardFiltersByAuthIndexAndModel(t *testing.T) {
 	db := openTestDatabase(t)
-	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}, &entities.ModelPriceSetting{}); err != nil {
+	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}); err != nil {
 		t.Fatalf("AutoMigrate: %v", err)
 	}
 
@@ -161,7 +156,6 @@ func TestBuildSpendDashboardFiltersByAuthIndexAndModel(t *testing.T) {
 		ObservedAt: day.Add(time.Hour),
 	})
 
-	resolver := newUsageCostResolverForTest(t, db)
 	start := day
 	end := day.Add(24 * time.Hour)
 
@@ -169,7 +163,7 @@ func TestBuildSpendDashboardFiltersByAuthIndexAndModel(t *testing.T) {
 		StartTime: &start,
 		EndTime:   &end,
 		AuthIndex: "auth-a",
-	}, resolver)
+	})
 	if err != nil {
 		t.Fatalf("BuildSpendDashboard: %v", err)
 	}
