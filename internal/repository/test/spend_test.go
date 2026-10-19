@@ -323,3 +323,57 @@ func TestBuildSpendDashboardExcludesPoeHistoryForAPIKeyFilter(t *testing.T) {
 		t.Fatalf("expected only key-1 stored USD and no Poe points, got %+v", dashboard.Rows)
 	}
 }
+
+// Codex #34 review: Poe's full charge replaces (not adds to) a partial stored subtotal, and completeness is judged
+// across every daily-stat row merged into the dashboard row (here: two API keys, one incomplete).
+func TestBuildSpendDashboardPoeFallbackReplacesIncompleteMergedUsage(t *testing.T) {
+	db := openTestDatabase(t)
+	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}, &entities.UsageIdentity{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	deletedAt := time.Date(2026, 10, 18, 0, 0, 0, 0, time.Local)
+	// 已删除身份、冒号前缀：历史仍需对齐。
+	if err := db.Create(&entities.UsageIdentity{
+		Name: "poe-old", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey",
+		Identity: "auth-poe", Type: "openai", Provider: "Poe", Prefix: "PX", IsDeleted: true, DeletedAt: &deletedAt,
+	}).Error; err != nil {
+		t.Fatalf("seed poe identity: %v", err)
+	}
+	day := time.Date(2026, 10, 17, 0, 0, 0, 0, time.Local)
+	priced, partial := 1.0, 0.25
+	zero, one := int64(0), int64(1)
+	for _, stat := range []entities.UsageOverviewDailyStat{
+		{BucketStart: day, APIGroupKey: "key-a", Model: "px:bot-1", AuthIndex: "auth-poe", RequestCount: 2, CostUSD: &priced, UnavailableCostCount: &zero},
+		{BucketStart: day, APIGroupKey: "key-b", Model: "px:bot-1", AuthIndex: "auth-poe", RequestCount: 2, CostUSD: &partial, UnavailableCostCount: &one},
+	} {
+		if err := db.Create(&stat).Error; err != nil {
+			t.Fatalf("seed daily stat: %v", err)
+		}
+	}
+	usd1, usd2 := 2.0, 1.0
+	for index, rec := range []entities.PoePointsHistory{
+		{QueryID: "q-1", AuthIndex: "auth-poe", BotName: "Bot-1", CostUSD: &usd1, ObservedAt: day.Add(time.Hour)},
+		{QueryID: "q-2", AuthIndex: "auth-poe", BotName: "bot-1", CostUSD: &usd2, ObservedAt: day.Add(2 * time.Hour)},
+	} {
+		if err := db.Create(&rec).Error; err != nil {
+			t.Fatalf("seed poe history %d: %v", index, err)
+		}
+	}
+	start, end := day, day.AddDate(0, 0, 1)
+	dashboard, err := repository.BuildSpendDashboard(context.Background(), db, repodto.UsageQueryFilter{StartTime: &start, EndTime: &end, EndExclusive: true})
+	if err != nil {
+		t.Fatalf("BuildSpendDashboard: %v", err)
+	}
+	if len(dashboard.Rows) != 1 {
+		t.Fatalf("expected one merged row, got %+v", dashboard.Rows)
+	}
+	if got := dashboard.Rows[0].USDSpent; got != 3.0 {
+		t.Fatalf("expected Poe full charge $3.00 (both Poe groups, replacing $1.25 incomplete stored), got %v", got)
+	}
+
+	// 选中单个完整计价的 API Key 时不合并 Poe，保留已存费用。
+	scoped, err := repository.BuildSpendDashboard(context.Background(), db, repodto.UsageQueryFilter{StartTime: &start, EndTime: &end, EndExclusive: true, APIGroupKey: "key-a"})
+	if err != nil || len(scoped.Rows) != 1 || scoped.Rows[0].USDSpent != 1.0 || !scoped.PoeHistoryExcluded {
+		t.Fatalf("expected key-a stored $1.00 with Poe excluded, got %+v err=%v", scoped, err)
+	}
+}

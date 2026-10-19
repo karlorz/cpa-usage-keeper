@@ -46,8 +46,16 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 	}
 
 	aggMap := make(map[spendDashboardKey]*dto.SpendRowRecord)
-	// pricedUsage 记录该行是否已有可用的已存 USD；只有没有时才回退到 Poe 回报的 USD，避免重复计费。
-	pricedUsage := make(map[spendDashboardKey]bool)
+	// 已存 USD 与 Poe 回报 USD 分开累计，聚合后每行只选一个来源，避免重复计费。
+	usdSources := make(map[spendDashboardKey]*spendUSDSources)
+	sourcesFor := func(key spendDashboardKey) *spendUSDSources {
+		sources, ok := usdSources[key]
+		if !ok {
+			sources = &spendUSDSources{}
+			usdSources[key] = sources
+		}
+		return sources
+	}
 
 	// Poe 身份的 CPA 前缀（例如 dd/deepseek-v4-flash），用于把 CPA 模型名与 Poe bot_name 对齐。
 	poePrefixes, err := loadPoeIdentityPrefixesByAuthIndex(db.WithContext(ctx))
@@ -86,17 +94,19 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 			}
 			aggMap[key] = entry
 		}
-		entry.USDSpent += costUSD
-		// 已存费用明确（cost_usd 非 NULL 且无不可计价请求）才视为已计价。
-		if stat.CostUSD != nil && (stat.UnavailableCostCount == nil || *stat.UnavailableCostCount == 0) {
-			pricedUsage[key] = true
+		sources := sourcesFor(key)
+		sources.hasUsage = true
+		sources.storedUSD += costUSD
+		// 任一贡献行费用不完整（cost_usd 为 NULL 或存在不可计价请求）即视为整行未完整计价。
+		if stat.CostUSD == nil || (stat.UnavailableCostCount != nil && *stat.UnavailableCostCount > 0) {
+			sources.incomplete = true
 		}
 	}
 
 	// 2. Load compute points and USD from poe_points_history, grouped in SQL.
 	// poe_points_history 没有 API Key 归属；选中 API Key 时排除，避免把整个 Poe 账户的消费混入该 Key 的范围。
 	if strings.TrimSpace(filter.APIGroupKey) != "" {
-		return finalizeSpendDashboard(aggMap, true), nil
+		return finalizeSpendDashboard(aggMap, usdSources, true), nil
 	}
 	type poeSpendAggregate struct {
 		AuthIndex   string  `gorm:"column:auth_index"`
@@ -146,17 +156,38 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 			aggMap[key] = entry
 		}
 		entry.PointsSpent += p.PointsSpent
-		// Only fall back to Poe-reported USD when no priced usage cost exists for the same identity/model/day.
-		if !pricedUsage[key] && p.USDSpent > 0 {
-			entry.USDSpent += p.USDSpent
-		}
+		sourcesFor(key).poeUSD += p.USDSpent
 	}
 
-	return finalizeSpendDashboard(aggMap, false), nil
+	return finalizeSpendDashboard(aggMap, usdSources, false), nil
 }
 
-// finalizeSpendDashboard flattens and sorts rows (newest date first).
-func finalizeSpendDashboard(aggMap map[spendDashboardKey]*dto.SpendRowRecord, poeHistoryExcluded bool) *dto.SpendDashboardRecord {
+// spendUSDSources 记录同一合并键下的已存 USD 与 Poe 回报 USD。
+type spendUSDSources struct {
+	storedUSD  float64
+	poeUSD     float64
+	hasUsage   bool
+	incomplete bool
+}
+
+// selectUSD 只选一个来源：已存费用完整时用已存；否则 Poe 有回报时用 Poe 全额（替换不完整的已存小计）；都没有时保留已存小计。
+func (s *spendUSDSources) selectUSD() float64 {
+	if s.hasUsage && !s.incomplete {
+		return s.storedUSD
+	}
+	if s.poeUSD > 0 {
+		return s.poeUSD
+	}
+	return s.storedUSD
+}
+
+// finalizeSpendDashboard resolves USD per row, then flattens and sorts rows (newest date first).
+func finalizeSpendDashboard(aggMap map[spendDashboardKey]*dto.SpendRowRecord, usdSources map[spendDashboardKey]*spendUSDSources, poeHistoryExcluded bool) *dto.SpendDashboardRecord {
+	for key, entry := range aggMap {
+		if sources, ok := usdSources[key]; ok {
+			entry.USDSpent = sources.selectUSD()
+		}
+	}
 	// 3. Flatten and sort rows
 	rows := make([]dto.SpendRowRecord, 0, len(aggMap))
 	for _, entry := range aggMap {
