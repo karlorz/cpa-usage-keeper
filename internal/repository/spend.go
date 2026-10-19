@@ -38,7 +38,12 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 
 	// Align to local calendar day boundaries
 	windowStart := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
-	windowEnd := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location()).AddDate(0, 0, 1)
+	endDay := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location())
+	windowEnd := endDay.AddDate(0, 0, 1)
+	// 自定义日期范围已由解析器转换为次日零点的开区间，不能再向后多扩一天。
+	if filter.EndExclusive && end.Equal(endDay) {
+		windowEnd = endDay
+	}
 
 	aggMap := make(map[spendDashboardKey]*dto.SpendRowRecord)
 

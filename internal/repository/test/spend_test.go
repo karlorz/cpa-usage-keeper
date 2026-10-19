@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -170,5 +171,40 @@ func TestBuildSpendDashboardFiltersByAuthIndexAndModel(t *testing.T) {
 
 	if len(dashboard.Rows) != 1 || dashboard.Rows[0].AuthIndex != "auth-a" {
 		t.Fatalf("expected 1 row for auth-a, got %+v", dashboard.Rows)
+	}
+}
+
+func TestBuildSpendDashboardHonorsExclusiveCustomEnd(t *testing.T) {
+	db := openTestDatabase(t)
+	if err := db.AutoMigrate(&entities.UsageOverviewDailyStat{}, &entities.PoePointsHistory{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	day := time.Date(2026, 10, 17, 0, 0, 0, 0, time.Local)
+	next := day.AddDate(0, 0, 1)
+	points := 10.0
+	cost := 1.0
+	for index, at := range []time.Time{day, next} {
+		if err := db.Create(&entities.UsageOverviewDailyStat{BucketStart: at, APIGroupKey: "key-1", Model: "model-a", AuthIndex: "auth-a", RequestCount: 1, CostUSD: &cost}).Error; err != nil {
+			t.Fatalf("seed daily stat: %v", err)
+		}
+		if err := db.Create(&entities.PoePointsHistory{QueryID: fmt.Sprintf("q-%d", index), AuthIndex: "auth-a", BotName: "bot-1", CostPoints: &points, ObservedAt: at.Add(time.Hour)}).Error; err != nil {
+			t.Fatalf("seed poe history: %v", err)
+		}
+	}
+	// 选择「仅 10 月 17 日」：解析器给出 [17 日 00:00, 18 日 00:00) 开区间。
+	start, end := day, next
+	dashboard, err := repository.BuildSpendDashboard(context.Background(), db, repodto.UsageQueryFilter{
+		StartTime: &start, EndTime: &end, EndExclusive: true,
+	})
+	if err != nil {
+		t.Fatalf("BuildSpendDashboard: %v", err)
+	}
+	for _, row := range dashboard.Rows {
+		if row.Date != day.Format(time.DateOnly) {
+			t.Fatalf("exclusive custom end leaked the following day: %+v", dashboard.Rows)
+		}
+	}
+	if len(dashboard.Rows) == 0 {
+		t.Fatal("expected spend rows for the selected day")
 	}
 }
