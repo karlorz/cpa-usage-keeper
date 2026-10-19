@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"cpa-usage-keeper/internal/entities"
-	"cpa-usage-keeper/internal/pricing"
 	"cpa-usage-keeper/internal/repository/dto"
 	"cpa-usage-keeper/internal/timeutil"
 
@@ -21,8 +20,9 @@ type spendDashboardKey struct {
 	date      string
 }
 
-// BuildSpendDashboard aggregates USD from UsageOverviewDailyStat/UsageEvent and compute points from PoePointsHistory.
-func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQueryFilter, costResolver pricing.Resolver) (*dto.SpendDashboardRecord, error) {
+// BuildSpendDashboard aggregates stored USD from UsageOverviewDailyStat and compute points from PoePointsHistory.
+// v2: 费用直接读取日桶已存 cost_usd，不再按当前价格目录重算历史费用。
+func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQueryFilter) (*dto.SpendDashboardRecord, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database is nil")
 	}
@@ -42,9 +42,8 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 
 	aggMap := make(map[spendDashboardKey]*dto.SpendRowRecord)
 
-	// 1. Load USD spend from UsageOverviewDailyStats
-	activeFields := costResolver.ActiveFields()
-	dailyStats, err := loadDailyStatsForSpend(db.WithContext(ctx), filter, windowStart, windowEnd, activeFields)
+	// 1. Load stored USD spend from UsageOverviewDailyStats
+	dailyStats, err := loadDailyStatsForSpend(db.WithContext(ctx), filter, windowStart, windowEnd)
 	if err != nil {
 		return nil, fmt.Errorf("load daily stats for spend dashboard: %w", err)
 	}
@@ -54,8 +53,10 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 		model := strings.TrimSpace(stat.Model)
 		date := timeutil.NormalizeStorageTime(stat.BucketStart).Format(time.DateOnly)
 
-		costResult := calculateAnalysisOverviewProjectionCost(costResolver, stat)
-		costUSD := costResult.Cost.TotalCostUSD
+		costUSD := 0.0
+		if stat.CostUSD != nil {
+			costUSD = *stat.CostUSD
+		}
 
 		key := spendDashboardKey{
 			authIndex: authIndex,
@@ -147,12 +148,18 @@ func BuildSpendDashboard(ctx context.Context, db *gorm.DB, filter dto.UsageQuery
 	}, nil
 }
 
-func loadDailyStatsForSpend(db *gorm.DB, filter dto.UsageQueryFilter, start, end time.Time, activeFields pricing.ActiveFields) ([]analysisOverviewStatProjection, error) {
-	query := db.Model(&entities.UsageOverviewDailyStat{})
-	// Include left join with cpa_api_keys only if api_group_key filter is set or cpa_api_keys exists
-	rows := make([]analysisOverviewStatProjection, 0)
-	query = query.
-		Select(analysisOverviewProjectionColumns(activeFields)).
+// spendDailyStatProjection 只读取消费看板需要的维度与已存费用。
+type spendDailyStatProjection struct {
+	BucketStart time.Time `gorm:"column:bucket_start"`
+	AuthIndex   string    `gorm:"column:auth_index"`
+	Model       string    `gorm:"column:model"`
+	CostUSD     *float64  `gorm:"column:cost_usd"`
+}
+
+func loadDailyStatsForSpend(db *gorm.DB, filter dto.UsageQueryFilter, start, end time.Time) ([]spendDailyStatProjection, error) {
+	rows := make([]spendDailyStatProjection, 0)
+	query := db.Model(&entities.UsageOverviewDailyStat{}).
+		Select("bucket_start, auth_index, model, cost_usd").
 		Where("bucket_start >= ? AND bucket_start < ?", timeutil.FormatStorageTime(start), timeutil.FormatStorageTime(end)).
 		Order("bucket_start asc")
 	if apiGroupKey := strings.TrimSpace(filter.APIGroupKey); apiGroupKey != "" {

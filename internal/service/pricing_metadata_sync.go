@@ -9,38 +9,36 @@ import (
 	"unicode"
 
 	"cpa-usage-keeper/internal/entities"
+	"cpa-usage-keeper/internal/pricing"
 	"cpa-usage-keeper/internal/pricingmetadata"
-	servicedto "cpa-usage-keeper/internal/service/dto"
 
 	"gorm.io/gorm"
 )
 
 const (
-	// poeCacheReadPayRate is the fraction of prompt price charged for Poe
+	// karlorz fork patch: poeCacheReadPayRate is the fraction of prompt price charged for Poe
 	// cache-read text. Verified 2026-08-27 on DeepSeek-V4-Flash: 114413 input
 	// chars, 113152 cache-discount chars, 89 output chars → $0.00337 vs Poe $0.0034.
 	poeCacheReadPayRate = 0.20
 )
 
-func (s *pricingService) PreviewPricingSync(ctx context.Context, sourceID string) (servicedto.PricingSyncPreview, error) {
+// loadPricingSyncCatalog 获取当前模型标识和所选来源目录，供审核基础价格使用。
+func (s *pricingService) loadPricingSyncCatalog(ctx context.Context, sourceID string) ([]string, pricingmetadata.Catalog, error) {
 	if _, err := pricingmetadata.SourceByID(sourceID); err != nil {
-		return servicedto.PricingSyncPreview{}, err
+		return nil, pricingmetadata.Catalog{}, err
 	}
 	models, err := s.effectiveModels(ctx)
 	if err != nil {
-		return servicedto.PricingSyncPreview{}, err
+		return nil, pricingmetadata.Catalog{}, err
 	}
 	catalog, err := s.metadataClient.Fetch(ctx, sourceID)
 	if err != nil {
-		return servicedto.PricingSyncPreview{}, err
+		return nil, pricingmetadata.Catalog{}, err
 	}
-	poePrefixes, err := listPoeIdentityPrefixSet(s.db)
-	if err != nil {
-		return servicedto.PricingSyncPreview{}, err
-	}
-	return buildPricingSyncPreviewFromCatalog(models, catalog, poePrefixes)
+	return models, catalog, nil
 }
 
+// listPoeIdentityPrefixSet (karlorz fork patch) 收集 Poe 身份的 CPA 前缀，用于把前缀模型识别为 Poe 计价。
 func listPoeIdentityPrefixSet(db *gorm.DB) (map[string]struct{}, error) {
 	prefixes := make(map[string]struct{})
 	if db == nil {
@@ -73,19 +71,21 @@ type pricingCatalogIndex struct {
 
 type pricingSyncCandidate struct {
 	entry         pricingmetadata.Entry
-	matchType     string
 	score         int
 	idMatchLength int
 }
 
-func buildPricingSyncPreviewFromCatalog(
-	models []string,
-	catalog pricingmetadata.Catalog,
-	poePrefixes map[string]struct{},
-) (servicedto.PricingSyncPreview, error) {
+// pricingSyncMatchedPrice 是来源匹配后的内部事实，新拉取接口只公开审核基础价所需字段。
+type pricingSyncMatchedPrice struct {
+	Model, MatchedModel, SourceProviderName, PricingStyle string
+	BasePrices                                            pricing.BasePrices
+}
+
+// collectPricingSyncMatches 保持已确认的匹配优先级和去重结果，供新同步拉取使用。
+func collectPricingSyncMatches(models []string, catalog pricingmetadata.Catalog, poePrefixes map[string]struct{}) ([]pricingSyncMatchedPrice, []string) {
 	entries := catalog.Entries
 	index := buildPricingCatalogIndex(entries)
-	matches := make([]servicedto.PricingSyncMatch, 0, len(models))
+	matches := make([]pricingSyncMatchedPrice, 0, len(models))
 	unmatched := make([]string, 0)
 	seenModels := make(map[string]struct{}, len(models))
 
@@ -118,22 +118,14 @@ func buildPricingSyncPreviewFromCatalog(
 	})
 	sort.Strings(unmatched)
 
-	return servicedto.PricingSyncPreview{
-		SourceID:        catalog.Source.ID,
-		Source:          catalog.Source.Name,
-		SourceURL:       catalog.Source.URL,
-		MetadataModels:  len(entries),
-		Matches:         matches,
-		UnmatchedModels: unmatched,
-	}, nil
+	return matches, unmatched
 }
 
-func buildPricingSyncMatchFromCandidates(model string, candidates []pricingSyncCandidate, poePrefixes map[string]struct{}) (servicedto.PricingSyncMatch, bool) {
+func buildPricingSyncMatchFromCandidates(model string, candidates []pricingSyncCandidate, poePrefixes map[string]struct{}) (pricingSyncMatchedPrice, bool) {
 	for _, candidate := range candidates {
 		match, ok := buildPricingSyncMatch(
 			model,
 			candidate.entry.Model,
-			candidate.matchType,
 			candidate.entry.ProviderID,
 			candidate.entry.ProviderName,
 			poePrefixes,
@@ -142,7 +134,7 @@ func buildPricingSyncMatchFromCandidates(model string, candidates []pricingSyncC
 			return match, true
 		}
 	}
-	return servicedto.PricingSyncMatch{}, false
+	return pricingSyncMatchedPrice{}, false
 }
 
 func buildPricingCatalogIndex(entries []pricingmetadata.Entry) pricingCatalogIndex {
@@ -187,11 +179,10 @@ func matchPricingCatalogCandidates(model string, index pricingCatalogIndex) []pr
 	}
 
 	var candidates []pricingSyncCandidate
-	add := func(entries []pricingmetadata.Entry, matchType string, score int) {
+	add := func(entries []pricingmetadata.Entry, score int) {
 		for _, entry := range entries {
 			candidates = append(candidates, pricingSyncCandidate{
 				entry:         entry,
-				matchType:     matchType,
 				score:         score,
 				idMatchLength: pricingModelIDMatchLength(model, entry.Model.ID),
 			})
@@ -202,13 +193,13 @@ func matchPricingCatalogCandidates(model string, index pricingCatalogIndex) []pr
 	if suffix != model {
 		// CPA 前缀可由用户自由配置，价格匹配先使用去前缀后的真实模型 ID；
 		// 完整 ID 仅作为低优先级兜底，不能用于推断 Models.dev 供应商。
-		add(index.exact[strings.ToLower(suffix)], "index_suffix", 100)
-		add(index.normalized[normalizePricingModelKey(suffix)], "index_normalized_suffix", 96)
-		add(index.exact[strings.ToLower(model)], "index_exact", 92)
-		add(index.normalized[normalizePricingModelKey(model)], "index_normalized", 90)
+		add(index.exact[strings.ToLower(suffix)], 100)
+		add(index.normalized[normalizePricingModelKey(suffix)], 96)
+		add(index.exact[strings.ToLower(model)], 92)
+		add(index.normalized[normalizePricingModelKey(model)], 90)
 	} else {
-		add(index.exact[strings.ToLower(model)], "index_exact", 100)
-		add(index.normalized[normalizePricingModelKey(model)], "index_normalized", 92)
+		add(index.exact[strings.ToLower(model)], 100)
+		add(index.normalized[normalizePricingModelKey(model)], 92)
 	}
 
 	return sortedUniquePricingCandidates(model, candidates)
@@ -483,17 +474,18 @@ func normalizePricingModelKey(value string) string {
 	return builder.String()
 }
 
-func buildPricingSyncMatch(model string, metadataModel pricingmetadata.Model, matchType string, providerID string, providerName string, poePrefixes map[string]struct{}) (servicedto.PricingSyncMatch, bool) {
+func buildPricingSyncMatch(model string, metadataModel pricingmetadata.Model, providerID string, providerName string, poePrefixes map[string]struct{}) (pricingSyncMatchedPrice, bool) {
 	if metadataModel.Cost.Input == nil || metadataModel.Cost.Output == nil {
-		return servicedto.PricingSyncMatch{}, false
+		return pricingSyncMatchedPrice{}, false
 	}
 	input := *metadataModel.Cost.Input
 	output := *metadataModel.Cost.Output
 	if !validMetadataPrice(input) || !validMetadataPrice(output) {
-		return servicedto.PricingSyncMatch{}, false
+		return pricingSyncMatchedPrice{}, false
 	}
 
 	pricingStyle := pricingStyleForMetadataModel(metadataModel)
+	// karlorz fork patch: Poe 来源或 Poe 前缀模型使用 poe 风格，并按 Poe 实际缓存读取费率覆盖来源缓存价。
 	if strings.EqualFold(providerID, "poe") || strings.EqualFold(providerName, "poe") || cpaModelUsesPoePrefix(model, poePrefixes) {
 		pricingStyle = entities.ModelPricingStylePoe
 	}
@@ -505,12 +497,12 @@ func buildPricingSyncMatch(model string, metadataModel pricingmetadata.Model, ma
 		if metadataModel.Cost.CacheRead != nil {
 			cacheRead = *metadataModel.Cost.CacheRead
 		}
-		// Keeper 当前保存单组基础价格；这里只映射 来源提供的基础缓存写入价格，长上下文 tiers 留待独立价格模型支持。
+		// 同步只导入来源的默认基础价，不导入长上下文 tiers，也不覆盖模型已有价格分支。
 		if metadataModel.Cost.CacheWrite != nil {
 			cacheWrite = *metadataModel.Cost.CacheWrite
 		}
 		if !validMetadataPrice(cacheRead) || !validMetadataPrice(cacheWrite) {
-			return servicedto.PricingSyncMatch{}, false
+			return pricingSyncMatchedPrice{}, false
 		}
 	}
 
@@ -522,17 +514,9 @@ func buildPricingSyncMatch(model string, metadataModel pricingmetadata.Model, ma
 	if providerName == "" {
 		providerName = strings.TrimSpace(providerID)
 	}
-	return servicedto.PricingSyncMatch{
-		Model:                model,
-		MatchedModel:         matchedModel,
-		MatchType:            matchType,
-		SourceProviderID:     strings.TrimSpace(providerID),
-		SourceProviderName:   providerName,
-		PricingStyle:         pricingStyle,
-		PromptPricePer1M:     input,
-		CompletionPricePer1M: output,
-		CacheReadPricePer1M:  cacheRead,
-		CacheWritePricePer1M: cacheWrite,
+	return pricingSyncMatchedPrice{
+		Model: model, MatchedModel: matchedModel, SourceProviderName: providerName, PricingStyle: pricingStyle,
+		BasePrices: pricing.BasePrices{Input: input, Output: output, CacheRead: cacheRead, CacheWrite: cacheWrite},
 	}, true
 }
 
