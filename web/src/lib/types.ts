@@ -881,6 +881,8 @@ export interface SpendDashboardRow {
 
 export interface SpendDashboardResponse {
   rows: SpendDashboardRow[]
+  /** Poe points_history has no API key attribution; true when it was left out because an API key filter is active. */
+  poe_history_excluded?: boolean
 }
 
 export interface CpaApiKeyDisplayItem {

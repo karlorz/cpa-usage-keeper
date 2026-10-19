@@ -11,5 +11,6 @@ type SpendRow struct {
 
 // SpendDashboard holds the aggregated spend dashboard output.
 type SpendDashboard struct {
-	Rows []SpendRow `json:"rows"`
+	Rows               []SpendRow `json:"rows"`
+	PoeHistoryExcluded bool       `json:"poe_history_excluded"`
 }

@@ -989,6 +989,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [analysisLatencyData, setAnalysisLatencyData] = useState<AnalysisLatencyDiagnostics | null>(null);
   const [spendRows, setSpendRows] = useState<SpendDashboardRow[]>([]);
   const [spendLoading, setSpendLoading] = useState(false);
+  const [spendPoeHistoryExcluded, setSpendPoeHistoryExcluded] = useState(false);
   const analysisRequestControllerRef = useRef<AbortController | null>(null);
 
   const tabOptions = useMemo(
@@ -1207,12 +1208,14 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
       .then((spendResp) => {
         if (analysisRequestControllerRef.current === controller || !controller.signal.aborted) {
           setSpendRows(spendResp.rows || []);
+          setSpendPoeHistoryExcluded(spendResp.poe_history_excluded === true);
           setSpendLoading(false);
         }
       })
       .catch(() => {
         if (analysisRequestControllerRef.current === controller || !controller.signal.aborted) {
           setSpendRows([]);
+          setSpendPoeHistoryExcluded(false);
           setSpendLoading(false);
         }
       });
@@ -2282,6 +2285,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                 <SpendDashboardCard
                   rows={spendRows}
                   loading={spendLoading}
+                  poeHistoryExcluded={spendPoeHistoryExcluded}
                 />
               </>
             )}

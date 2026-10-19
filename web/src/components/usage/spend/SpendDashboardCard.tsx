@@ -8,9 +8,11 @@ import styles from './SpendDashboardCard.module.scss';
 interface SpendDashboardCardProps {
   rows: SpendDashboardRow[];
   loading?: boolean;
+  /** Poe compute points are account-wide and cannot be attributed to an API key; show a note when they were excluded. */
+  poeHistoryExcluded?: boolean;
 }
 
-export function SpendDashboardCard({ rows, loading = false }: SpendDashboardCardProps) {
+export function SpendDashboardCard({ rows, loading = false, poeHistoryExcluded = false }: SpendDashboardCardProps) {
   const { t } = useTranslation();
 
   const totals = useMemo(() => {
@@ -29,6 +31,9 @@ export function SpendDashboardCard({ rows, loading = false }: SpendDashboardCard
         <div className={styles.titleGroup}>
           <h3 className={styles.title}>{t('usage_stats.spend_dashboard_title')}</h3>
           <p className={styles.subtitle}>{t('usage_stats.spend_dashboard_subtitle')}</p>
+          {poeHistoryExcluded ? (
+            <p className={styles.subtitle} data-spend-poe-excluded="true">{t('usage_stats.spend_poe_excluded_for_api_key')}</p>
+          ) : null}
         </div>
         <div className={styles.summaryBadges}>
           <span className={`${styles.badge} ${styles.badgeUSD}`}>

@@ -64,4 +64,11 @@ describe('SpendDashboardCard', () => {
     expect(markup).toContain('$5.00'); // total USD
     expect(markup).toContain('3,000'); // total points
   });
+  it('shows a note when Poe history is excluded for an API key filter', () => {
+    const excluded = renderToStaticMarkup(<SpendDashboardCard rows={[]} loading={false} poeHistoryExcluded />);
+    expect(excluded).toContain('data-spend-poe-excluded="true"');
+    expect(excluded).toContain('cannot be attributed to an API key');
+    const included = renderToStaticMarkup(<SpendDashboardCard rows={[]} loading={false} />);
+    expect(included).not.toContain('data-spend-poe-excluded');
+  });
 });

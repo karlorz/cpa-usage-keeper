@@ -12,4 +12,6 @@ type SpendRowRecord struct {
 // SpendDashboardRecord holds the aggregated spend dashboard output.
 type SpendDashboardRecord struct {
 	Rows []SpendRowRecord `json:"rows"`
+	// PoeHistoryExcluded 表示因选中 API Key 而未合并 Poe points_history（其无 API Key 归属）。
+	PoeHistoryExcluded bool `json:"poe_history_excluded"`
 }
