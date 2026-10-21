@@ -96,6 +96,7 @@ func TestProviderMetadataSyncKeepsFailedSourcesAndStalesOnlySuccessfulTypes(t *t
 		{Name: "Old Claude", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "old-claude", Type: "claude", Provider: "Claude", CreatedAt: oldTime, UpdatedAt: oldTime},
 		{Name: "Old Codex", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "old-codex", Type: "codex", Provider: "Codex", CreatedAt: oldTime, UpdatedAt: oldTime},
 		{Name: "Old Vertex", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "old-vertex", Type: "vertex", Provider: "Vertex", CreatedAt: oldTime, UpdatedAt: oldTime},
+		{Name: "Old OpenAI", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "old-openai", Type: "openai", Provider: "OpenAI", LookupKey: "old-openai-secret", CreatedAt: oldTime, UpdatedAt: oldTime},
 	}
 	if err := db.Create(&seed).Error; err != nil {
 		t.Fatalf("seed provider identities: %v", err)
@@ -108,9 +109,10 @@ func TestProviderMetadataSyncKeepsFailedSourcesAndStalesOnlySuccessfulTypes(t *t
 	fetcher.standardResults["claude"] = &response.ProviderKeyConfigResult{StatusCode: 200, Payload: []providerconfig.ProviderKeyConfig{}}
 	fetcher.standardResults["codex"] = nil
 	fetcher.standardResults["vertex"] = &response.ProviderKeyConfigResult{StatusCode: 200, Payload: []providerconfig.ProviderKeyConfig{{APIKey: "invalid-without-auth-index"}}}
+	fetcher.openAIResult = nil
 	syncer := newMetadataTestSyncer(db, fetcher, func() time.Time { return now })
 	err := syncer.SyncMetadata(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "fetch gemini api keys: gemini unavailable") || !strings.Contains(err.Error(), "codex api keys response is nil") || !strings.Contains(err.Error(), "vertex api keys contains an API key without auth_index") || strings.Contains(err.Error(), "invalid-without-auth-index") {
+	if err == nil || !strings.Contains(err.Error(), "fetch gemini api keys: gemini unavailable") || !strings.Contains(err.Error(), "codex api keys response is nil") || !strings.Contains(err.Error(), "vertex api keys contains an API key without auth_index") || !strings.Contains(err.Error(), "openai compatibility response is nil") || strings.Contains(err.Error(), "invalid-without-auth-index") {
 		t.Fatalf("provider boundary warning = %v", err)
 	}
 	identities := loadMetadataIdentityMap(t, db)
@@ -134,6 +136,10 @@ func TestProviderMetadataSyncKeepsFailedSourcesAndStalesOnlySuccessfulTypes(t *t
 	if vertexRow.IsDeleted || vertexRow.DeletedAt != nil || !vertexRow.UpdatedAt.Equal(oldTime) {
 		t.Fatalf("incomplete Vertex source changed identity deleted = %v", vertexRow.IsDeleted)
 	}
+	openAIRow := identities[metadataIdentityKey(entities.UsageIdentityAuthTypeAIProvider, "old-openai")]
+	if openAIRow.IsDeleted || openAIRow.DeletedAt != nil || !openAIRow.UpdatedAt.Equal(oldTime) || openAIRow.LookupKey != "old-openai-secret" {
+		t.Fatalf("nil OpenAI identity = %+v", openAIRow)
+	}
 }
 
 func TestProviderMetadataSyncFailedSourcesPreserveRowsAndEmptySourcesRemoveThem(t *testing.T) {
@@ -147,6 +153,7 @@ func TestProviderMetadataSyncFailedSourcesPreserveRowsAndEmptySourcesRemoveThem(
 		{Name: "xAI API Key", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "shared-xai-auth", Type: "xai", Provider: "xAI", LookupKey: "old-xai-secret", CreatedAt: oldTime, UpdatedAt: oldTime},
 		{Name: "Interactions", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "old-interactions", Type: "gemini-interactions", Provider: "Gemini Interactions", LookupKey: "old-interactions-secret", CreatedAt: oldTime, UpdatedAt: oldTime},
 		{Name: "Meta", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "old-meta", Type: "meta", Provider: "Meta", LookupKey: "old-meta-secret", CreatedAt: oldTime, UpdatedAt: oldTime},
+		{Name: "OpenAI", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "old-openai", Type: "openai", Provider: "OpenAI", LookupKey: "old-openai-secret", CreatedAt: oldTime, UpdatedAt: oldTime},
 	}
 	if err := db.Create(&seed).Error; err != nil {
 		t.Fatalf("seed new provider identities: %v", err)
@@ -159,6 +166,8 @@ func TestProviderMetadataSyncFailedSourcesPreserveRowsAndEmptySourcesRemoveThem(
 	fetcher.standardErrors["gemini-interactions"] = errors.New("interactions endpoint missing")
 	fetcher.standardResults["meta"] = &response.ProviderKeyConfigResult{StatusCode: 404}
 	fetcher.standardErrors["meta"] = errors.New("meta endpoint missing")
+	fetcher.openAIResult = &response.OpenAICompatibilityResult{StatusCode: 404}
+	fetcher.compatibilityError = errors.New("openai endpoint missing")
 	currentNow := firstNow
 	syncer := newMetadataTestSyncer(db, fetcher, func() time.Time { return currentNow })
 	if err := syncer.SyncMetadata(context.Background()); err == nil {
@@ -177,12 +186,19 @@ func TestProviderMetadataSyncFailedSourcesPreserveRowsAndEmptySourcesRemoveThem(
 	if metaProvider.IsDeleted || metaProvider.DeletedAt != nil || !metaProvider.UpdatedAt.Equal(oldTime) {
 		t.Fatalf("Meta provider after upstream failure = %+v", metaProvider)
 	}
+	openAIProvider := firstRows[metadataIdentityKey(entities.UsageIdentityAuthTypeAIProvider, "old-openai")]
+	if openAIProvider.IsDeleted || openAIProvider.DeletedAt != nil || !openAIProvider.UpdatedAt.Equal(oldTime) || openAIProvider.LookupKey != "old-openai-secret" {
+		t.Fatalf("OpenAI provider after upstream failure = %+v", openAIProvider)
+	}
 	fetcher.standardResults["xai"] = &response.ProviderKeyConfigResult{StatusCode: 200, Payload: []providerconfig.ProviderKeyConfig{}}
 	fetcher.standardErrors["xai"] = nil
 	fetcher.standardResults["gemini-interactions"] = &response.ProviderKeyConfigResult{StatusCode: 200, Payload: []providerconfig.ProviderKeyConfig{}}
 	fetcher.standardErrors["gemini-interactions"] = nil
 	fetcher.standardResults["meta"] = &response.ProviderKeyConfigResult{StatusCode: 200, Payload: []providerconfig.ProviderKeyConfig{}}
 	fetcher.standardErrors["meta"] = nil
+	// 成功响应里的成员全部被过滤时，仍须按成功空快照清理旧 OpenAI 身份。
+	fetcher.openAIResult = &response.OpenAICompatibilityResult{StatusCode: 200, Payload: []providerconfig.OpenAICompatibilityConfig{{Disabled: metadataBoolPointer(true), APIKeyEntries: []providerconfig.OpenAIApiKeyEntry{{APIKey: "missing-auth-key"}, {APIKey: "blank-auth-key", AuthIndex: " \t"}, {AuthIndex: "missing-key-auth"}}}}}
+	fetcher.compatibilityError = nil
 	currentNow = secondNow
 	if err := syncer.SyncMetadata(context.Background()); err != nil {
 		t.Fatalf("empty-list SyncMetadata returned error: %v", err)
@@ -199,6 +215,10 @@ func TestProviderMetadataSyncFailedSourcesPreserveRowsAndEmptySourcesRemoveThem(
 	metaProvider = secondRows[metadataIdentityKey(entities.UsageIdentityAuthTypeAIProvider, "old-meta")]
 	if !metaProvider.IsDeleted || metaProvider.DeletedAt == nil || !metaProvider.DeletedAt.Equal(secondNow) || !metaProvider.UpdatedAt.Equal(secondNow) {
 		t.Fatalf("Meta provider after empty list = %+v", metaProvider)
+	}
+	openAIProvider = secondRows[metadataIdentityKey(entities.UsageIdentityAuthTypeAIProvider, "old-openai")]
+	if !openAIProvider.IsDeleted || openAIProvider.DeletedAt == nil || !openAIProvider.DeletedAt.Equal(secondNow) || !openAIProvider.UpdatedAt.Equal(secondNow) || openAIProvider.LookupKey != "old-openai-secret" {
+		t.Fatalf("OpenAI provider after all entries skipped = %+v", openAIProvider)
 	}
 	xAIOAuth := secondRows[metadataIdentityKey(entities.UsageIdentityAuthTypeAuthFile, "shared-xai-auth")]
 	// provider stale 不能跨 auth_type 删除 OAuth 行；相同 Auth File metadata 不刷新时间。

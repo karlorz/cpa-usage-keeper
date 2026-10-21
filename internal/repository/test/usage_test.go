@@ -407,6 +407,8 @@ func TestBuildAnalysisWithFilterIncludesCurrentHourStatsInRollingHourlyRanges(t 
 }
 
 func TestBuildAnalysisWithFilterFillsTodayAndYesterdayHourlyBucketsFromStats(t *testing.T) {
+	// 固定普通 24 小时且午夜对齐小时桶的基线；DST 和非整点边界由 calendar_day 测试覆盖。
+	withRepositoryTestLocation(t, "Asia/Shanghai")
 	db := openTestDatabase(t)
 	start := time.Date(2026, 5, 14, 0, 0, 0, 0, time.Local)
 	end := time.Date(2026, 5, 14, 23, 59, 59, 0, time.Local)

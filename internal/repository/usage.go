@@ -388,6 +388,15 @@ func BuildAnalysisWithFilter(db *gorm.DB, filter dto.UsageQueryFilter) (*dto.Ana
 	}
 	windowMinutes := computeWindowMinutes(filter)
 	bucketByDay := windowMinutes > 24*60
+	if bucketByDay && (filter.Range == "today" || filter.Range == "yesterday") {
+		localStart := timeutil.NormalizeStorageTime(*filter.StartTime)
+		day, exists := timeutil.DayBounds(timeutil.DateOf(localStart), localStart.Location())
+		// Overview 小时桶按绝对整点聚合，无法拆分跨越自然日边界的半小时或四分之一小时。
+		// 长自然日仅在首尾均对齐时使用小时图，否则保留已有日汇总，避免漏算或混入相邻日。
+		if exists && day.Start.Equal(day.Start.Truncate(time.Hour)) && day.End.Equal(day.End.Truncate(time.Hour)) {
+			bucketByDay = false
+		}
+	}
 	if strings.TrimSpace(filter.Range) == "custom" {
 		// Custom 显式粒度与 Overview 保持一致，不能用单日跨度反推 hourly。
 		switch strings.TrimSpace(filter.CustomUnit) {
@@ -455,9 +464,9 @@ func BuildAnalysisWithFilter(db *gorm.DB, filter dto.UsageQueryFilter) (*dto.Ana
 func analysisRollingDayWindow(start, end time.Time) (time.Time, time.Time) {
 	localStart := timeutil.NormalizeStorageTime(start)
 	localEnd := timeutil.NormalizeStorageTime(end)
-	windowStart := time.Date(localStart.Year(), localStart.Month(), localStart.Day(), 0, 0, 0, 0, localStart.Location())
-	windowEnd := time.Date(localEnd.Year(), localEnd.Month(), localEnd.Day(), 0, 0, 0, 0, localEnd.Location()).AddDate(0, 0, 1)
-	return windowStart, windowEnd
+	startDay, _ := timeutil.DayBounds(timeutil.DateOf(localStart), localStart.Location())
+	endDay, _ := timeutil.DayBounds(timeutil.DateOf(localEnd), localEnd.Location())
+	return startDay.Start, endDay.End
 }
 
 func analysisHourlyStatsEnd(filter dto.UsageQueryFilter, fullEnd time.Time) time.Time {
@@ -475,8 +484,9 @@ func analysisHourlyStatsEnd(filter dto.UsageQueryFilter, fullEnd time.Time) time
 	default:
 		return fullEnd
 	}
-	start := timeutil.NormalizeStorageTime(*filter.StartTime).Truncate(time.Hour)
-	dayBoundaryEnd := start.Add(24 * time.Hour)
+	start := timeutil.NormalizeStorageTime(*filter.StartTime)
+	bounds, _ := timeutil.DayBounds(timeutil.DateOf(start), start.Location())
+	dayBoundaryEnd := bounds.End
 	if dayBoundaryEnd.After(fullEnd) {
 		return dayBoundaryEnd
 	}
@@ -713,14 +723,15 @@ func fillAnalysisFullDayHourlyBuckets(record *dto.AnalysisRecord, filter dto.Usa
 	if filter.Range != "today" && filter.Range != "yesterday" {
 		return
 	}
-	start := timeutil.NormalizeStorageTime(*filter.StartTime).Truncate(time.Hour)
+	localStart := timeutil.NormalizeStorageTime(*filter.StartTime)
+	bounds, _ := timeutil.DayBounds(timeutil.DateOf(localStart), localStart.Location())
+	start := localStart.Truncate(time.Hour)
 	bucketByTime := make(map[time.Time]dto.AnalysisTokenUsageBucketRecord, len(record.TokenUsage)+24)
 	for _, bucket := range record.TokenUsage {
 		bucketByTime[timeutil.NormalizeStorageTime(bucket.Bucket).Truncate(time.Hour)] = bucket
 	}
 	record.TokenUsage = record.TokenUsage[:0]
-	for hour := 0; hour <= 24; hour++ {
-		bucketTime := start.Add(time.Duration(hour) * time.Hour)
+	for bucketTime := start; !bucketTime.After(bounds.End); bucketTime = bucketTime.Add(time.Hour) {
 		bucket, ok := bucketByTime[bucketTime]
 		if !ok {
 			bucket = dto.AnalysisTokenUsageBucketRecord{Bucket: bucketTime, CostAvailable: true}
@@ -1079,11 +1090,13 @@ func usageOverviewFullHourWindow(start, end time.Time) (time.Time, time.Time) {
 func usageOverviewFullDayWindow(start, end time.Time) (time.Time, time.Time) {
 	start = timeutil.NormalizeStorageTime(start)
 	end = timeutil.NormalizeStorageTime(end)
-	fullStart := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+	startDay, _ := timeutil.DayBounds(timeutil.DateOf(start), start.Location())
+	endDay, _ := timeutil.DayBounds(timeutil.DateOf(end), end.Location())
+	fullStart := startDay.Start
 	if !start.Equal(fullStart) {
-		fullStart = fullStart.AddDate(0, 0, 1)
+		fullStart = startDay.End
 	}
-	fullEnd := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location())
+	fullEnd := endDay.Start
 	if fullEnd.Before(fullStart) {
 		fullEnd = fullStart
 	}
@@ -1271,32 +1284,30 @@ func loadUsageOverviewRealtimeEventRangeWithFilter(db *gorm.DB, filter dto.Usage
 	return loadUsageOverviewEventRangeWithProjection(db, filter, start, end, includeEnd, usageOverviewRealtimeEventProjectionColumns)
 }
 
-// loadUsageOverviewEventRangeWithProjection 使用单段 timestamp 范围查询，避免 OR 影响 usage_events 时间索引。
+// loadUsageOverviewEventRangeWithProjection 按时区区段读取原有窄窗口，每段仍使用 timestamp 索引范围。
 func loadUsageOverviewEventRangeWithProjection(db *gorm.DB, filter dto.UsageQueryFilter, start, end time.Time, includeEnd bool, projection string) ([]entities.UsageEvent, error) {
-	if end.Before(start) || (!includeEnd && end.Equal(start)) {
+	reads := usageEventTimeReads(start, end, includeEnd)
+	if len(reads) == 0 {
 		return nil, nil
 	}
-	// 单段范围让 SQLite 可以稳定使用 timestamp 索引，不把左右边界拼成 OR 查询。
-	query := db.Model(&entities.UsageEvent{}).
-		Where("timestamp >= ?", timeutil.FormatStorageTime(start)).
-		Select(projection).
-		Order("timestamp asc")
-	if includeEnd {
-		query = query.Where("timestamp <= ?", timeutil.FormatStorageTime(end))
-	} else {
-		query = query.Where("timestamp < ?", timeutil.FormatStorageTime(end))
+	events := make([]entities.UsageEvent, 0)
+	for _, read := range reads {
+		query := read.query(db.Model(&entities.UsageEvent{}).Select(projection)).Order("timestamp asc")
+		if apiGroupKey := strings.TrimSpace(filter.APIGroupKey); apiGroupKey != "" {
+			query = query.Where("api_group_key = ?", apiGroupKey)
+		}
+		var rows []usageEventProjection
+		if err := query.Find(&rows).Error; err != nil {
+			return nil, fmt.Errorf("load usage overview boundary event range: %w", err)
+		}
+		for _, row := range rows {
+			event := usageEventProjectionToEntity(row)
+			if read.contains(event.Timestamp) {
+				events = append(events, event)
+			}
+		}
 	}
-	if apiGroupKey := strings.TrimSpace(filter.APIGroupKey); apiGroupKey != "" {
-		query = query.Where("api_group_key = ?", apiGroupKey)
-	}
-	var rows []usageEventProjection
-	if err := query.Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("load usage overview boundary event range: %w", err)
-	}
-	events := make([]entities.UsageEvent, 0, len(rows))
-	for _, row := range rows {
-		events = append(events, usageEventProjectionToEntity(row))
-	}
+	sort.SliceStable(events, func(i, j int) bool { return events[i].Timestamp.Before(events[j].Timestamp) })
 	return events, nil
 }
 
@@ -2043,11 +2054,14 @@ func finalizeUsageOverviewSeries(series *dto.UsageOverviewSeriesRecord) {
 	}
 }
 
-func usageOverviewSeriesBucketMinutes(bucketKey string) int64 {
-	if len(bucketKey) == len(time.DateOnly) {
-		return usageOverviewDailyAverageDayMinutes
+func usageOverviewSeriesBucketMinutes(bucketKey string) float64 {
+	if date, err := timeutil.ParseCivilDate(bucketKey); err == nil {
+		if bounds, exists := timeutil.DayBounds(date, time.Local); exists {
+			return bounds.Minutes()
+		}
+		return float64(usageOverviewDailyAverageDayMinutes)
 	}
-	return int64(time.Hour / time.Minute)
+	return float64(time.Hour / time.Minute)
 }
 
 func usageOverviewFloat64Ptr(value float64) *float64 {

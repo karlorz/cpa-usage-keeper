@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 时间轴和数据共用项目时区，空桶保留为零；完整天用 AddDate 避免 DST 导致日期漂移。
+// 时间轴和数据共用项目时区，空桶保留为零；完整天独立枚举历法日期，避免 DST 异常午夜导致日期漂移。
 func newUsageOverviewComparisons(filter dto.UsageQueryFilter, byDay bool) *dto.UsageOverviewComparisonsRecord {
 	result := &dto.UsageOverviewComparisonsRecord{
 		Models: map[string]*dto.UsageComparisonItemRecord{}, APIKeys: map[string]*dto.UsageComparisonItemRecord{},
@@ -28,17 +28,26 @@ func newUsageOverviewComparisons(filter dto.UsageQueryFilter, byDay bool) *dto.U
 func usageOverviewComparisonBuckets(filter dto.UsageQueryFilter, byDay bool) []string {
 	buckets := []string{}
 	start, end := timeutil.NormalizeStorageTime(*filter.StartTime), timeutil.NormalizeStorageTime(*filter.EndTime)
-	cursor := start.Truncate(time.Hour)
 	if byDay {
-		cursor = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
-	}
-	for cursor.Before(end) || (!filter.EndExclusive && cursor.Equal(end)) {
-		bucket := usageOverviewBucket(cursor, byDay)
-		buckets = append(buckets, bucket)
-		if byDay {
-			cursor = cursor.AddDate(0, 0, 1)
-		} else {
-			cursor = cursor.Add(time.Hour)
+		for date := timeutil.DateOf(start); ; date = date.AddDays(1) {
+			bounds, exists := timeutil.DayBounds(date, start.Location())
+			if !exists {
+				continue
+			}
+			if bounds.Start.After(end) || (filter.EndExclusive && bounds.Start.Equal(end)) {
+				break
+			}
+			buckets = append(buckets, date.String())
+		}
+	} else {
+		includeEnd := !filter.EndExclusive
+		if filter.Range == "today" || filter.Range == "yesterday" {
+			// 与 Analysis 保持完整自然日轴和空终点；仅扩展显示轴，不改查询范围。
+			bounds, _ := timeutil.DayBounds(timeutil.DateOf(start), start.Location())
+			end, includeEnd = bounds.End, true
+		}
+		for cursor := start.Truncate(time.Hour); cursor.Before(end) || (includeEnd && cursor.Equal(end)); cursor = cursor.Add(time.Hour) {
+			buckets = append(buckets, usageOverviewBucket(cursor, false))
 		}
 	}
 	return buckets

@@ -12,7 +12,7 @@ import { createCompositionLabelsPlugin } from './compositionLabels';
 import { compositionGeometryPlugin } from './compositionGeometry';
 import { AnalysisRankingList, getAnalysisRankingColor, useAnalysisHighlight, type AnalysisRankingItem } from './analysisRanking';
 import { useTopModelsTooltip } from './topModelsTooltip';
-import { formatBucketLabel } from './analysisTimeLabels';
+import { formatBucketLabels } from './analysisTimeLabels';
 import styles from './AnalysisPanel.module.scss';
 import { AnalysisModelSpeedCard } from '../model-speed/AnalysisModelSpeedCard';
 import type { ModelSpeedRefreshSignal } from '../model-speed/modelSpeedAnimation';
@@ -512,7 +512,7 @@ function buildTopModelsViewModel(
   });
 
   return {
-    labels: buckets.map((bucket) => formatBucketLabel(bucket, granularity, timezone)),
+    labels: formatBucketLabels(buckets, granularity, timezone),
     series,
     bucketTotals: Array.from({ length: buckets.length }, (_, index) =>
       ranked.reduce((sum, item) => sum + item.totalTokens[index], 0)),
@@ -632,8 +632,9 @@ function buildTopModelsChartOptions({
 }
 
 function buildTokenUsageRows(buckets: AnalysisTokenUsageBucket[], granularity: AnalysisResponse['granularity'], timezone?: string): ChartRow[] {
-  return buckets.map((bucket) => ({
-    label: formatBucketLabel(bucket.bucket, granularity, timezone),
+  const labels = formatBucketLabels(buckets.map((bucket) => bucket.bucket), granularity, timezone);
+  return buckets.map((bucket, index) => ({
+    label: labels[index],
     input: calculateDisplayInputTokens({
       inputTokens: bucket.input_tokens,
       cacheReadTokens: bucket.cache_read_tokens,

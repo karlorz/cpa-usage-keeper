@@ -164,7 +164,7 @@ func NewUsageRecentEventCache(db *gorm.DB, opts UsageRecentEventCacheOptions) (*
 	// start 是初始化查询左边界，窗口之外的历史事件不进入纯内存缓存。
 	start := now.Add(-cache.window)
 	// 只读取 Overview/realtime 需要的列，避免 event_key/request_id 等无关字段占内存。
-	rows, err := loadUsageRecentEventCacheRows(context.Background(), db, start)
+	rows, err := loadUsageRecentEventCacheRows(context.Background(), db, start, now)
 	if err != nil {
 		// 初始化失败表示缓存对象不可用，必须关闭 worker 并把错误交给调用方。
 		cache.Close()
@@ -179,7 +179,7 @@ func NewUsageRecentEventCache(db *gorm.DB, opts UsageRecentEventCacheOptions) (*
 	// 初始化完成后释放锁，后续读写正常并发。
 	cache.mu.Unlock()
 	// 健康图保留 5h，可能覆盖高流量账号的百万级请求；按批流式加载，避免启动峰值内存跟行数线性增长。
-	if err := loadCredentialHealthCacheRowsBatched(db, now.Add(-credentialHealthWindow), credentialHealthStartupBatchSize, func(rows []credentialHealthLoadRow) error {
+	if err := loadCredentialHealthCacheRowsBatched(db, now.Add(-credentialHealthWindow), now, credentialHealthStartupBatchSize, func(rows []credentialHealthLoadRow) error {
 		cache.mu.Lock()
 		cache.appendCredentialHealthRowsLocked(rows)
 		cache.mu.Unlock()
@@ -363,7 +363,7 @@ func (c *UsageRecentEventCache) ReloadStoredCostEvents(ctx context.Context, db *
 		return err
 	}
 	now := timeutil.NormalizeStorageTime(c.now())
-	rows, err := loadUsageRecentEventCacheRows(ctx, db, now.Add(-c.window))
+	rows, err := loadUsageRecentEventCacheRows(ctx, db, now.Add(-c.window), now)
 	if err != nil {
 		c.invalidateEventReads()
 		return err
@@ -566,18 +566,25 @@ func (c *UsageRecentEventCache) Window() time.Duration {
 	return c.window
 }
 
-func loadUsageRecentEventCacheRows(ctx context.Context, db *gorm.DB, start time.Time) ([]recentUsageEventLoadRow, error) {
+func loadUsageRecentEventCacheRows(ctx context.Context, db *gorm.DB, start, anchor time.Time) ([]recentUsageEventLoadRow, error) {
 	var rows []recentUsageEventLoadRow
+	read := usageEventTimeReadSince(start, anchor)
 	// 只 select 最近缓存和 realtime 必需字段，避免大字段进入 70 分钟内存窗口。
-	if err := db.WithContext(ctx).Model(&entities.UsageEvent{}).
+	if err := read.query(db.WithContext(ctx).Model(&entities.UsageEvent{})).
 		Select("api_group_key, provider, auth_type, model, model_alias, timestamp, source, auth_index, failed, generate, latency_ms, ttft_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens, cost_usd, cost_available").
-		// 启动加载只取 retention 左边界之后的数据。
-		Where("timestamp >= ?", timeutil.FormatStorageTime(start)).
 		// 按时间排序让后续剪枝和调试输出更直观。
 		Order("timestamp asc").
 		Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("load usage recent event cache rows: %w", err)
 	}
+	kept := rows[:0]
+	for _, row := range rows {
+		if read.contains(row.Timestamp) {
+			kept = append(kept, row)
+		}
+	}
+	clear(rows[len(kept):])
+	rows = kept
 	return rows, nil
 }
 

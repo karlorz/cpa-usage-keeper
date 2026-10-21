@@ -1,3 +1,4 @@
+import { disambiguateTimeLabels } from '@/utils/usage/timeLabels';
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import '@/lib/chartjs';
@@ -66,8 +67,8 @@ function ComparisonArea({ dimension, comparisons, loading, isDark, isMobile }: C
   const buckets = comparisons?.buckets ?? EMPTY_BUCKETS;
   const view = useMemo(() => buildComparisonView(items, t('usage_stats.comparison_others')), [items, t]);
   const granularity = comparisons?.granularity ?? 'hourly';
-  const labels = useMemo(() => buckets.map(bucket => formatComparisonBucket(bucket, granularity, comparisons?.timezone, i18n.language)), [buckets, granularity, comparisons?.timezone, i18n.language]);
-  const fullLabels = useMemo(() => buckets.map(bucket => formatComparisonBucket(bucket, granularity, comparisons?.timezone, i18n.language, true)), [buckets, granularity, comparisons?.timezone, i18n.language]);
+  const labels = useMemo(() => disambiguateTimeLabels(buckets, comparisons?.timezone, bucket => formatComparisonBucket(bucket, granularity, comparisons?.timezone, i18n.language)), [buckets, granularity, comparisons?.timezone, i18n.language]);
+  const fullLabels = useMemo(() => disambiguateTimeLabels(buckets, comparisons?.timezone, bucket => formatComparisonBucket(bucket, granularity, comparisons?.timezone, i18n.language, true)), [buckets, granularity, comparisons?.timezone, i18n.language]);
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const chartRef = useRef<ChartJS<'line'>>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);

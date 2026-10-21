@@ -340,7 +340,7 @@ func TestCredentialHealthStartupLoadStreamsRowsInBatches(t *testing.T) {
 	}
 
 	var batchSizes []int
-	err := loadCredentialHealthCacheRowsBatched(db, now.Add(-5*time.Hour), 10, func(rows opaqueCredentialHealthRows) error {
+	err := loadCredentialHealthCacheRowsBatched(db, now.Add(-5*time.Hour), now, 10, func(rows opaqueCredentialHealthRows) error {
 		batchSizes = append(batchSizes, len(rows))
 		return nil
 	})
