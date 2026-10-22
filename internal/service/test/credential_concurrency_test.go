@@ -8,24 +8,24 @@ import (
 	"testing"
 	"time"
 
-	"cpa-usage-keeper/internal/cpa/dto/authfiles"
+	"cpa-usage-keeper/internal/cpa/dto/credentials"
 	"cpa-usage-keeper/internal/cpa/dto/response"
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/service"
 )
 
-// 模拟 CPA 对认证文件先取副本、再整条替换的真实写入合同。
-type authFileReplacementClient struct {
+// 模拟 CPA 对凭证先取副本、再整条替换的真实写入合同。
+type credentialReplacementClient struct {
 	priorityClientStub
 	mu            sync.Mutex
-	file          authfiles.AuthFile
+	file          credentials.Credential
 	firstKind     string
 	firstStarted  chan struct{}
 	releaseFirst  chan struct{}
 	secondStarted chan struct{}
 }
 
-func (c *authFileReplacementClient) patch(kind string, priority int, disabled bool) (int, error) {
+func (c *credentialReplacementClient) patch(kind string, priority int, disabled bool) (int, error) {
 	c.mu.Lock()
 	snapshot := c.file
 	c.mu.Unlock()
@@ -45,20 +45,20 @@ func (c *authFileReplacementClient) patch(kind string, priority int, disabled bo
 	c.mu.Unlock()
 	return http.StatusOK, nil
 }
-func (c *authFileReplacementClient) UpdateAuthFilePriority(_ context.Context, _ string, priority int) (int, error) {
+func (c *credentialReplacementClient) UpdateCredentialPriority(_ context.Context, _ string, priority int) (int, error) {
 	return c.patch("priority", priority, false)
 }
-func (c *authFileReplacementClient) UpdateAuthFileStatus(_ context.Context, _, _ string, disabled bool) (int, error) {
+func (c *credentialReplacementClient) UpdateCredentialStatus(_ context.Context, _, _ string, disabled bool) (int, error) {
 	return c.patch("status", 0, disabled)
 }
-func (c *authFileReplacementClient) FetchProviderKeyConfig(context.Context, string) (*response.ProviderKeyConfigResult, error) {
+func (c *credentialReplacementClient) FetchProviderKeyConfig(context.Context, string) (*response.ProviderKeyConfigResult, error) {
 	return nil, fmt.Errorf("unused")
 }
-func (c *authFileReplacementClient) DeleteAuthFiles(context.Context, []string) error {
+func (c *credentialReplacementClient) DeleteCredentials(context.Context, []string) error {
 	return fmt.Errorf("unused")
 }
 
-func TestAuthFileStatusAndPriorityShareMutationLock(t *testing.T) {
+func TestCredentialStatusAndPriorityShareMutationLock(t *testing.T) {
 	for _, scenario := range []struct {
 		name      string
 		firstKind string
@@ -69,24 +69,24 @@ func TestAuthFileStatusAndPriorityShareMutationLock(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			firstKind := scenario.firstKind
-			db := openMetadataTestDatabase(t, "auth-file-shared-lock.db")
-			seedAuthFileCredential(t, db, "auth.json", "auth-index")
-			client := &authFileReplacementClient{file: authfiles.AuthFile{Name: "auth.json", AuthIndex: "auth-index"}, firstKind: firstKind, firstStarted: make(chan struct{}), releaseFirst: make(chan struct{}), secondStarted: make(chan struct{})}
+			db := openMetadataTestDatabase(t, "credential-shared-lock.db")
+			seedCredentialCredential(t, db, "auth.json", "auth-index")
+			client := &credentialReplacementClient{file: credentials.Credential{Name: "auth.json", AuthIndex: "auth-index"}, firstKind: firstKind, firstStarted: make(chan struct{}), releaseFirst: make(chan struct{}), secondStarted: make(chan struct{})}
 			locks := &service.CredentialMutationLocks{}
 			status := service.NewCredentialStatusService(db, client, nil, locks)
 			priority := service.NewCredentialPriorityService(db, client, nil, locks)
-			bulk := service.NewAuthFilesManagementService(client, locks)
+			bulk := service.NewCredentialsManagementService(client, locks)
 			actions := map[string]func() error{
 				"status": func() error {
 					if scenario.bulk {
-						_, err := bulk.SetAuthFilesDisabled(context.Background(), []string{"auth.json"}, true)
+						_, err := bulk.SetCredentialsDisabled(context.Background(), []string{"auth.json"}, true)
 						return err
 					}
-					_, err := status.SetAuthFileDisabled(context.Background(), "auth-index", true)
+					_, err := status.SetCredentialDisabled(context.Background(), "auth-index", true)
 					return err
 				},
 				"priority": func() error {
-					_, err := priority.SetAuthFilePriority(context.Background(), "auth-index", 8)
+					_, err := priority.SetCredentialPriority(context.Background(), "auth-index", 8)
 					return err
 				},
 			}
@@ -126,7 +126,7 @@ func TestAuthFileStatusAndPriorityShareMutationLock(t *testing.T) {
 			if file.Priority == nil || *file.Priority != 8 || file.Disabled == nil || !*file.Disabled {
 				t.Errorf("CPA lost a field update: priority=%v disabled=%v", file.Priority, file.Disabled)
 			}
-			requirePriority(t, loadPriority(t, db, entities.UsageIdentityAuthTypeAuthFile, "auth-index"), 8)
+			requirePriority(t, loadPriority(t, db, entities.UsageIdentityAuthTypeCredential, "auth-index"), 8)
 		})
 	}
 }

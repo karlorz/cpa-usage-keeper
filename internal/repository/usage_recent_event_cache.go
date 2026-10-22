@@ -26,8 +26,8 @@ type RecentUsageIdentityKind uint8
 const (
 	// RecentUsageIdentityUnknown 表示缓存事件没有可用于 current usage 的身份 fallback。
 	RecentUsageIdentityUnknown RecentUsageIdentityKind = iota
-	// RecentUsageIdentityAuthFile 表示 auth_type=oauth，fallback label 使用 source。
-	RecentUsageIdentityAuthFile
+	// RecentUsageIdentityCredential 表示 auth_type=oauth，fallback label 使用 source。
+	RecentUsageIdentityCredential
 	// RecentUsageIdentityAIProvider 表示 auth_type=apikey，fallback label 使用 provider。
 	RecentUsageIdentityAIProvider
 )
@@ -44,7 +44,7 @@ type RecentUsageEvent struct {
 	ModelAlias string
 	// AuthIndex 用于关联 usage_identities，找不到身份时才使用 fallback。
 	AuthIndex string
-	// IdentityFallbackKind 记录 fallback 应落到 Auth File 还是 AI Provider。
+	// IdentityFallbackKind 记录 fallback 应落到 Credential 还是 AI Provider。
 	IdentityFallbackKind RecentUsageIdentityKind
 	// IdentityFallbackLabel 保存 source/provider 展示名，避免 realtime 再读 usage_events。
 	IdentityFallbackLabel string
@@ -89,7 +89,7 @@ type UsageRecentEventCache struct {
 	eventReadsValid bool
 	// pool 复用重复的 model/api/auth 字符串，降低 10w 级事件缓存内存。
 	pool recentUsageStringPool
-	// credentialHealth 保存 Auth Files / AI Provider 最近 5h 的成功/失败 10 分钟桶。
+	// credentialHealth 保存 Credentials / AI Provider 最近 5h 的成功/失败 10 分钟桶。
 	credentialHealth credentialHealthCache
 	// window 是缓存保留时长，只在创建时确定。
 	window time.Duration
@@ -598,7 +598,7 @@ func (c *UsageRecentEventCache) appendRecentEventsLocked(rows []recentUsageEvent
 }
 
 func (c *UsageRecentEventCache) recentEventFromRowLocked(row recentUsageEventLoadRow) RecentUsageEvent {
-	// auth_type 决定 fallback label 的来源：auth file 用 source，ai provider 用 provider。
+	// auth_type 决定 fallback label 的来源：credential 用 source，ai provider 用 provider。
 	identityKind, fallbackLabel := usageRecentIdentityFallback(row.AuthType, row.Source, row.Provider)
 	return RecentUsageEvent{
 		// timestamp 进入缓存前统一到项目存储时区。
@@ -661,8 +661,8 @@ func usageRecentIdentityFallback(authType, source, provider string) (RecentUsage
 	// 先把历史兼容的 auth_type 写法归一，再决定 fallback 维度。
 	switch normalizeRecentUsageAuthType(authType) {
 	case "oauth":
-		// Auth File 没有 identity 命中时，展示 source 作为兜底名称。
-		return RecentUsageIdentityAuthFile, strings.TrimSpace(source)
+		// Credential 没有 identity 命中时，展示 source 作为兜底名称。
+		return RecentUsageIdentityCredential, strings.TrimSpace(source)
 	case "apikey":
 		// AI Provider 没有 identity 命中时，展示 provider 作为兜底名称。
 		return RecentUsageIdentityAIProvider, strings.TrimSpace(provider)

@@ -891,7 +891,7 @@ func TestUsageEventsExportJSONIncludesAllExportFields(t *testing.T) {
 		Endpoint:            "GET /v1/responses",
 		AuthType:            "oauth",
 		Source:              "claude-code",
-		AuthIndex:           "auth-file-export",
+		AuthIndex:           "credential-export",
 		Failed:              false,
 		StatusCode:          new(200),
 		Stream:              new(true),
@@ -924,7 +924,7 @@ func TestUsageEventsExportJSONIncludesAllExportFields(t *testing.T) {
 		t.Fatalf("expected timestamped json filename, got %q", resp.Header().Get("Content-Disposition"))
 	}
 	for _, fragment := range []string{
-		`"total_count":1`, `"auth_index":"auth-file-export"`, `"model_alias":"gpt-json-alias"`,
+		`"total_count":1`, `"auth_index":"credential-export"`, `"model_alias":"gpt-json-alias"`,
 		`"executor_type":"chat_completions"`, `"endpoint":"GET /v1/responses"`, `"is_identity_deleted":true`,
 		`"api_key":"Team <Ops> & Co"`, `"cpa_api_key_id":"9"`, `"source_type":""`,
 		`"reasoning_effort":""`, `"ttft_ms":null`, `"speed_tps":10`,
@@ -1228,16 +1228,16 @@ func TestUsageEventsReturnsAndAcceptsCursorPagination(t *testing.T) {
 	}
 }
 
-func TestUsageEventsPassesAuthFileIdentitySourceFilterAsAuthIndex(t *testing.T) {
+func TestUsageEventsPassesCredentialIdentitySourceFilterAsAuthIndex(t *testing.T) {
 	provider := &usageEventsStub{eventsPage: &servicedto.UsageEventsPage{Events: []servicedto.UsageEventRecord{}, TotalCount: 0, Page: 1, PageSize: 100, TotalPages: 0}}
 	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "")
-	resp := serveAPIGet(router, "/api/v1/usage/events?range=24h&source=auth-file-index")
+	resp := serveAPIGet(router, "/api/v1/usage/events?range=24h&source=credential-index")
 
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.Code)
 	}
-	if provider.lastFilter.AuthIndex != "auth-file-index" || provider.lastFilter.Source != "" {
-		t.Fatalf("expected auth file identity source filter to use auth_index only, got %+v", provider.lastFilter)
+	if provider.lastFilter.AuthIndex != "credential-index" || provider.lastFilter.Source != "" {
+		t.Fatalf("expected credential identity source filter to use auth_index only, got %+v", provider.lastFilter)
 	}
 }
 
@@ -1322,7 +1322,7 @@ func TestUsageEventSpeedTPS(t *testing.T) {
 
 func TestUsageEventSourceFilterOptionsReturnsIdentitySources(t *testing.T) {
 	provider := &usageEventsStub{}
-	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "", OptionalProviders{UsageIdentity: usageIdentitiesStub{items: []entities.UsageIdentity{{ID: 1, Name: "Claude Main", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "authidx-source-a", Type: "openai", Provider: "Provider A", TotalRequests: 3}, {ID: 2, Name: "Provider A", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "authidx-source-b", Type: "openai", Provider: "Provider A"}, {ID: 3, Name: "Auth User", AuthType: entities.UsageIdentityAuthTypeAuthFile, AuthTypeName: "oauth", Identity: "auth-1", Type: "claude", Provider: "Claude", TotalRequests: 2}, {ID: 4, Name: "Zero Request User", AuthType: entities.UsageIdentityAuthTypeAuthFile, AuthTypeName: "oauth", Identity: "auth-zero", Type: "claude", Provider: "Claude"}, {ID: 5, Name: "Zero Provider", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "authidx-source-zero", Type: "openai", Provider: "Zero Provider"}, {ID: 6, Name: "Deleted Source", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "authidx-deleted", Type: "openai", Provider: "Deleted Provider", TotalRequests: 5, IsDeleted: true}, {ID: 7, Name: "   ", AuthType: entities.UsageIdentityAuthTypeAuthFile, AuthTypeName: "oauth", Identity: "auth-display", Type: "claude", Provider: "Claude Display", TotalRequests: 1}}}})
+	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "", OptionalProviders{UsageIdentity: usageIdentitiesStub{items: []entities.UsageIdentity{{ID: 1, Name: "Claude Main", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "authidx-source-a", Type: "openai", Provider: "Provider A", TotalRequests: 3}, {ID: 2, Name: "Provider A", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "authidx-source-b", Type: "openai", Provider: "Provider A"}, {ID: 3, Name: "Auth User", AuthType: entities.UsageIdentityAuthTypeCredential, AuthTypeName: "oauth", Identity: "auth-1", Type: "claude", Provider: "Claude", TotalRequests: 2}, {ID: 4, Name: "Zero Request User", AuthType: entities.UsageIdentityAuthTypeCredential, AuthTypeName: "oauth", Identity: "auth-zero", Type: "claude", Provider: "Claude"}, {ID: 5, Name: "Zero Provider", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "authidx-source-zero", Type: "openai", Provider: "Zero Provider"}, {ID: 6, Name: "Deleted Source", AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "authidx-deleted", Type: "openai", Provider: "Deleted Provider", TotalRequests: 5, IsDeleted: true}, {ID: 7, Name: "   ", AuthType: entities.UsageIdentityAuthTypeCredential, AuthTypeName: "oauth", Identity: "auth-display", Type: "claude", Provider: "Claude Display", TotalRequests: 1}}}})
 	resp := serveAPIGet(router, "/api/v1/usage/events/filters/sources?range=24h&model=ignored&source=ignored&result=failed&page=3&page_size=20")
 
 	if resp.Code != http.StatusOK {

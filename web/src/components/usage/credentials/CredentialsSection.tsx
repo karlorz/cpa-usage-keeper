@@ -11,8 +11,8 @@ import { PortalTooltip, usePortalTooltip } from '@/components/ui/PortalTooltip'
 import quotaCostIcon from '@/assets/icons/quota-cost.svg'
 import quotaTokenIcon from '@/assets/icons/quota-token.svg'
 import styles from './CredentialSections.module.scss'
-import { formatCredentialTimestamp, type AuthFileCredentialRow, type DisplayQuota } from './credentialViewModels'
-import { deleteAuthFiles, fetchClaudeResetGrants, fetchQuotaAutoRefreshSettings, fetchUsageQuotaResetCredits, setAuthFilesDisabled, updateQuotaAutoRefreshSettings, type UsageIdentityPageSort } from '@/lib/api'
+import { formatCredentialTimestamp, type CredentialRow, type DisplayQuota } from './credentialViewModels'
+import { deleteCredentials, fetchClaudeResetGrants, fetchQuotaAutoRefreshSettings, fetchUsageQuotaResetCredits, setCredentialsDisabled, updateQuotaAutoRefreshSettings, type UsageIdentityPageSort } from '@/lib/api'
 import type { ClaudeResetGrantsResponse, QuotaAutoRefreshScheduleUnit, QuotaAutoRefreshSettings, UsageQuotaInspectionResult, UsageQuotaInspectionResultStatus, UsageQuotaInspectionStatusResponse, UsageQuotaResetCreditsResponse, UsageQuotaResetResponse } from '@/lib/types'
 import { CredentialAliasEditor } from './CredentialAliasEditor'
 import { CredentialHealthPanel } from './CredentialHealthPanel'
@@ -31,7 +31,7 @@ type InspectionResultStatusFilter = 'normal' | 'limit_reached' | 'unauthorized_4
 type InspectionResultStatusFilterState = InspectionResultStatusFilter | null
 type InspectionStatTone = 'normal' | 'limitReached' | 'unauthorized' | 'failed' | 'unknown'
 type QuotaUsageMode = 'current' | 'estimated'
-type AuthFileDisplayMode = 'quota' | 'health'
+type CredentialDisplayMode = 'quota' | 'health'
 type InvalidInspectionAccountAction = 'disable' | 'delete'
 type QuotaErrorDisplay = {
   code?: string
@@ -72,7 +72,7 @@ const CREDENTIAL_EXPIRY_TOOLTIP_VIEWPORT_PADDING = 8
 
 const QUOTA_ERROR_MESSAGE_MAX_LENGTH = 96
 const QUOTA_ERROR_PARSE_MAX_DEPTH = 10
-const AUTH_FILE_DISPLAY_MODE_STORAGE_KEY = 'cpa.credentials.authFiles.displayMode'
+const CREDENTIAL_DISPLAY_MODE_STORAGE_KEY = 'cpa.credentials.displayMode'
 const ANTIGRAVITY_QUOTA_GROUP_KEYS = new Set([
   'antigravity-gemini-models',
   'antigravity-claude-and-gpt-models',
@@ -98,8 +98,8 @@ const AUTO_REFRESH_SCHEDULE_LIMITS: Record<QuotaAutoRefreshScheduleUnit, number>
 const AUTO_REFRESH_SCHEDULE_UNITS: QuotaAutoRefreshScheduleUnit[] = ['minute', 'hour', 'day', 'week']
 const AUTO_REFRESH_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const
 
-interface AuthFileCredentialsSectionProps {
-  rows: AuthFileCredentialRow[]
+interface CredentialsSectionProps {
+  rows: CredentialRow[]
   timeZone?: string
   total: number
   page: number
@@ -123,8 +123,8 @@ interface AuthFileCredentialsSectionProps {
   onResetQuotaForAuthIndex: (authIndex: string, grantId?: string, organizationId?: string) => Promise<UsageQuotaResetResponse | void>
   /** 编辑行消失时，焦点留在当前列表的原生筛选控件，不改变页面容器。 */
   editFallbackRef?: Ref<HTMLInputElement>
-  onEdit?: (row: AuthFileCredentialRow) => void
-  onOpenDetails?: (row: AuthFileCredentialRow) => void
+  onEdit?: (row: CredentialRow) => void
+  onOpenDetails?: (row: CredentialRow) => void
   /** 正在写入上游状态的 Keeper identity id 集合，用于阻止重复点击。 */
   statusPendingIdentityIds?: ReadonlySet<string>
   onToggleStatus?: (identityId: string, authIndex: string, disabled: boolean) => void
@@ -134,11 +134,11 @@ interface AuthFileCredentialsSectionProps {
   onAfterInvalidAccountAction?: () => Promise<void>
 }
 
-export function AuthFileCredentialsSection({ rows, timeZone, total, page, totalPages, pageSize, activeOnly, sort, loading, quotaRefreshing, quotaRefreshError, quotaInspectionStatus, quotaInspectionLoading, quotaInspectionStarting, quotaInspectionError, onPageChange, onPageSizeChange, onActiveOnlyChange, onSortChange, onRefreshQuota, onRefreshQuotaForAuthIndex, onResetQuotaForAuthIndex, editFallbackRef, onEdit, onOpenDetails, statusPendingIdentityIds, onToggleStatus, onSavePriority, onRefreshInspectionStatus, onStartInspection, onAfterInvalidAccountAction }: AuthFileCredentialsSectionProps) {
+export function CredentialsSection({ rows, timeZone, total, page, totalPages, pageSize, activeOnly, sort, loading, quotaRefreshing, quotaRefreshError, quotaInspectionStatus, quotaInspectionLoading, quotaInspectionStarting, quotaInspectionError, onPageChange, onPageSizeChange, onActiveOnlyChange, onSortChange, onRefreshQuota, onRefreshQuotaForAuthIndex, onResetQuotaForAuthIndex, editFallbackRef, onEdit, onOpenDetails, statusPendingIdentityIds, onToggleStatus, onSavePriority, onRefreshInspectionStatus, onStartInspection, onAfterInvalidAccountAction }: CredentialsSectionProps) {
   const { t } = useTranslation()
   const [inspectionOpen, setInspectionOpen] = useState(false)
   const [quotaUsageMode, setQuotaUsageMode] = useState<QuotaUsageMode>('current')
-  const [displayMode, setDisplayModeState] = useState<AuthFileDisplayMode>(() => readStoredAuthFileDisplayMode())
+  const [displayMode, setDisplayModeState] = useState<CredentialDisplayMode>(() => readStoredCredentialDisplayMode())
   const [expiryTooltip, setExpiryTooltip] = useState<CredentialExpiryTooltipState | null>(null)
   const expiryTooltipHoverTargetRef = useRef<CredentialExpiryTooltipTarget | null>(null)
   const expiryTooltipFocusTargetRef = useRef<CredentialExpiryTooltipTarget | null>(null)
@@ -149,9 +149,9 @@ export function AuthFileCredentialsSection({ rows, timeZone, total, page, totalP
     setInspectionOpen(true)
     void onRefreshInspectionStatus()
   }
-  const setDisplayMode = (mode: AuthFileDisplayMode) => {
+  const setDisplayMode = (mode: CredentialDisplayMode) => {
     setDisplayModeState(mode)
-    persistAuthFileDisplayMode(mode)
+    persistCredentialDisplayMode(mode)
   }
 
   const positionExpiryTooltip = useCallback((target: CredentialExpiryTooltipTarget | null) => {
@@ -207,19 +207,19 @@ export function AuthFileCredentialsSection({ rows, timeZone, total, page, totalP
   return (
     <>
       <CredentialSectionShell
-        title={t('usage_stats.credentials_auth_files_title')}
-        subtitle={t('usage_stats.credentials_auth_files_subtitle')}
+        title={t('usage_stats.credentials_title')}
+        subtitle={t('usage_stats.credentials_subtitle')}
         countLabel={t('usage_stats.credentials_count', { count: total })}
         titleExtra={(
-          <div className={styles.credentialAuthFileTitleControls}>
+          <div className={styles.credentialsTitleControls}>
             <label className={styles.credentialActiveOnlySwitch}>
-              <span className={styles.credentialActiveOnlyLabel}>{t('usage_stats.credentials_auth_files_active_only')}</span>
+              <span className={styles.credentialActiveOnlyLabel}>{t('usage_stats.credentials_active_only')}</span>
               <input ref={editFallbackRef} type="checkbox" checked={activeOnly} onChange={(event) => onActiveOnlyChange(event.target.checked)} />
               <span className={styles.credentialActiveOnlyTrack} aria-hidden="true">
                 <span className={styles.credentialActiveOnlyThumb} />
               </span>
             </label>
-            <AuthFileDisplayModeSwitch mode={displayMode} onChange={setDisplayMode} />
+            <CredentialDisplayModeSwitch mode={displayMode} onChange={setDisplayMode} />
           </div>
         )}
         actions={(
@@ -249,10 +249,10 @@ export function AuthFileCredentialsSection({ rows, timeZone, total, page, totalP
       {/* 批量刷新失败显示在区块顶部，单行任务失败显示在对应限额位置。 */}
       {quotaRefreshError && <div className={styles.credentialInlineError}>{quotaRefreshError}</div>}
       {loading && rows.length === 0 && <div className={styles.credentialEmptyState}>{t('common.loading')}</div>}
-      {!loading && rows.length === 0 && <div className={styles.credentialEmptyState}>{t('usage_stats.credentials_auth_files_empty')}</div>}
+      {!loading && rows.length === 0 && <div className={styles.credentialEmptyState}>{t('usage_stats.credentials_empty')}</div>}
       {rows.length > 0 && (
         <CredentialTableHeader
-          rowClassName={styles.authFileCredentialRow}
+          rowClassName={styles.credentialsRow}
           nameLabel={t('usage_stats.credentials_column_name')}
           totalRequestsLabel={t('usage_stats.total_requests')}
           successRateLabel={t('usage_stats.success_rate')}
@@ -276,7 +276,7 @@ export function AuthFileCredentialsSection({ rows, timeZone, total, page, totalP
           <CredentialRowShell
             key={rowKey}
             icon={(
-              // 认证文件 type 直接来自 CPA，可能是不认识的类型；没有品牌图标的类型不给开关，
+              // 凭证 type 直接来自 CPA，可能是不认识的类型；没有品牌图标的类型不给开关，
               // 否则左侧图标槽位会变成一个看不见却可点、可 Tab 的按钮。
               providerBrandIconKey(row.identity.type) ? (
                 <CredentialStatusToggle
@@ -364,12 +364,12 @@ export function AuthFileCredentialsSection({ rows, timeZone, total, page, totalP
                 <MetricPill value={<TonePercent value={row.cacheReadRate} tone={cacheReadRateTone(row.cacheReadRate)} />} />
               </>
             )}
-            rowClassName={styles.authFileCredentialRow}
+            rowClassName={styles.credentialsRow}
             side={showHealthMode ? (
               <CredentialHealthPanel displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.identity.last_used_at} statsUpdatedAt={row.identity.stats_updated_at} windowCacheReadRate={row.windowCacheReadRate} />
             ) : (
               <div className={styles.credentialQuotaSideWithAction}>
-                <AuthFileQuotaPanel row={row} quotaUsageMode={quotaUsageMode} timeZone={timeZone} />
+                <CredentialQuotaPanel row={row} quotaUsageMode={quotaUsageMode} timeZone={timeZone} />
                 <div className={styles.credentialQuotaActionStack}>
                   {/* reset 按钮只在官方缓存给出可用次数时展示；refresh 始终保留在右侧列居中位置。 */}
                   {resetCredits > 0 && (
@@ -794,12 +794,12 @@ export function formatResetCreditExpiry(value: string): string {
   return RESET_CREDIT_TIME_FORMATTER.format(date).replace(',', '')
 }
 
-function isRowRefreshing(row: AuthFileCredentialRow): boolean {
+function isRowRefreshing(row: CredentialRow): boolean {
   return row.refreshStatus === 'queued' || row.refreshStatus === 'running'
 }
 
 export function inspectionProgressTotal(status: Pick<UsageQuotaInspectionStatusResponse, 'total' | 'unknown'> | null): number {
-  // 弹框进度条展示的是“巡检刷新任务进度”，不是 Auth Files 总账号覆盖率。
+  // 弹框进度条展示的是“巡检刷新任务进度”，不是 Credentials 总账号覆盖率。
   if (!status) {
     return 0
   }
@@ -1030,7 +1030,7 @@ export function QuotaInspectionModal({
   const [settingsEnabled, setSettingsEnabled] = useState(false)
   const [scheduleUnit, setScheduleUnit] = useState<QuotaAutoRefreshScheduleUnit>('minute')
   const [scheduleValue, setScheduleValue] = useState('')
-  // total 由后端 Auth Files 身份统计提供，不用页面分页总数替代。
+  // total 由后端 Credentials 身份统计提供，不用页面分页总数替代。
   const total = status?.total ?? 0
   // cached 是已经能解析出最近巡检结果的账号数。
   const cached = status?.cached ?? 0
@@ -1093,9 +1093,9 @@ export function QuotaInspectionModal({
     setInvalidAccountError('')
     try {
       if (invalidAccountAction === 'disable') {
-        await setAuthFilesDisabled(selectedInvalidFileNames, true)
+        await setCredentialsDisabled(selectedInvalidFileNames, true)
       } else {
-        await deleteAuthFiles(selectedInvalidFileNames)
+        await deleteCredentials(selectedInvalidFileNames)
       }
       await Promise.all([onRefreshStatus(), onAfterInvalidAccountAction?.()])
       setInvalidAccountAction(null)
@@ -1686,12 +1686,12 @@ function QuotaUsageModeSwitch({ label, mode, onChange }: { label: string; mode: 
   )
 }
 
-function AuthFileDisplayModeSwitch({ mode, onChange }: { mode: AuthFileDisplayMode; onChange: (mode: AuthFileDisplayMode) => void }) {
+function CredentialDisplayModeSwitch({ mode, onChange }: { mode: CredentialDisplayMode; onChange: (mode: CredentialDisplayMode) => void }) {
   const { t } = useTranslation()
 
   return (
     <div className={styles.credentialDisplayModeControl}>
-      <div className={styles.credentialDisplayModeSwitcher} role="group" aria-label={t('usage_stats.credentials_auth_files_display_mode_aria')}>
+      <div className={styles.credentialDisplayModeSwitcher} role="group" aria-label={t('usage_stats.credentials_display_mode_aria')}>
         <span className={`${styles.credentialDisplayModeThumb} ${mode === 'health' ? styles.credentialDisplayModeThumbHealth : ''}`.trim()} aria-hidden="true" />
         <button
           type="button"
@@ -1700,7 +1700,7 @@ function AuthFileDisplayModeSwitch({ mode, onChange }: { mode: AuthFileDisplayMo
           aria-pressed={mode === 'quota'}
         >
           <IconShield size={12} />
-          <span>{t('usage_stats.credentials_auth_files_display_mode_quota')}</span>
+          <span>{t('usage_stats.credentials_display_mode_quota')}</span>
         </button>
         <button
           type="button"
@@ -1709,41 +1709,41 @@ function AuthFileDisplayModeSwitch({ mode, onChange }: { mode: AuthFileDisplayMo
           aria-pressed={mode === 'health'}
         >
           <IconChartLine size={12} />
-          <span>{t('usage_stats.credentials_auth_files_display_mode_health')}</span>
+          <span>{t('usage_stats.credentials_display_mode_health')}</span>
         </button>
       </div>
     </div>
   )
 }
 
-export function readStoredAuthFileDisplayMode(): AuthFileDisplayMode {
+export function readStoredCredentialDisplayMode(): CredentialDisplayMode {
   if (typeof window === 'undefined') {
     return 'quota'
   }
   try {
-    const storedMode = window.localStorage?.getItem(AUTH_FILE_DISPLAY_MODE_STORAGE_KEY)
-    return isAuthFileDisplayMode(storedMode) ? storedMode : 'quota'
+    const storedMode = window.localStorage?.getItem(CREDENTIAL_DISPLAY_MODE_STORAGE_KEY)
+    return isCredentialDisplayMode(storedMode) ? storedMode : 'quota'
   } catch {
     return 'quota'
   }
 }
 
-export function persistAuthFileDisplayMode(mode: AuthFileDisplayMode): void {
+export function persistCredentialDisplayMode(mode: CredentialDisplayMode): void {
   if (typeof window === 'undefined') {
     return
   }
   try {
-    window.localStorage?.setItem(AUTH_FILE_DISPLAY_MODE_STORAGE_KEY, mode)
+    window.localStorage?.setItem(CREDENTIAL_DISPLAY_MODE_STORAGE_KEY, mode)
   } catch {
     // localStorage 可能被隐私模式或浏览器策略禁用，忽略后保持本次页面内状态。
   }
 }
 
-function isAuthFileDisplayMode(value: string | null | undefined): value is AuthFileDisplayMode {
+function isCredentialDisplayMode(value: string | null | undefined): value is CredentialDisplayMode {
   return value === 'quota' || value === 'health'
 }
 
-export function AuthFileQuotaPanel({ row, quotaUsageMode, timeZone }: { row: AuthFileCredentialRow; quotaUsageMode: QuotaUsageMode; timeZone?: string }) {
+export function CredentialQuotaPanel({ row, quotaUsageMode, timeZone }: { row: CredentialRow; quotaUsageMode: QuotaUsageMode; timeZone?: string }) {
   const { t } = useTranslation()
 
   // 限额区域按加载、错误、刷新中、无缓存、可展示数据的顺序降级。
@@ -1772,7 +1772,7 @@ export function AuthFileQuotaPanel({ row, quotaUsageMode, timeZone }: { row: Aut
     <div className={styles.credentialQuotaPanel}>
       <div className={styles.credentialQuotaBars}>
         {/* 只有 canonical Antigravity 组提升为共享标题；其它 provider 继续沿用原始扁平 QuotaBar。 */}
-        {authFileQuotaPanelItems(row.displayQuotas).map((item) => item.kind === 'group'
+        {credentialQuotaPanelItems(row.displayQuotas).map((item) => item.kind === 'group'
           ? <AntigravityQuotaGroup key={item.renderKey} group={item} quotaUsageMode={quotaUsageMode} timeZone={timeZone} />
           : <QuotaBar key={item.quota.key} quota={item.quota} quotaUsageMode={quotaUsageMode} timeZone={timeZone} tooltipAlignRight={item.tooltipAlignRight} />)}
       </div>
@@ -1780,7 +1780,7 @@ export function AuthFileQuotaPanel({ row, quotaUsageMode, timeZone }: { row: Aut
   )
 }
 
-type AuthFileQuotaPanelItem =
+type CredentialQuotaPanelItem =
   | { kind: 'quota'; quota: DisplayQuota; tooltipAlignRight: boolean }
   | AntigravityQuotaGroupItem
 
@@ -1793,8 +1793,8 @@ type AntigravityQuotaGroupItem = {
   quotas: DisplayQuota[]
 }
 
-function authFileQuotaPanelItems(quotas: DisplayQuota[]): AuthFileQuotaPanelItem[] {
-  const items: AuthFileQuotaPanelItem[] = []
+function credentialQuotaPanelItems(quotas: DisplayQuota[]): CredentialQuotaPanelItem[] {
+  const items: CredentialQuotaPanelItem[] = []
   let flatColumn = 0
   for (const quota of quotas) {
     const groupKey = quota.groupKey?.trim() ?? ''

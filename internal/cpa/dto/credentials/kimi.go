@@ -1,4 +1,4 @@
-package authfiles
+package credentials
 
 // KimiCredentialMetadata 只保留解析 Kimi 配额站点所需的非敏感字段。
 type KimiCredentialMetadata struct {

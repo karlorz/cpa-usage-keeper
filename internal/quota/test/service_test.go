@@ -91,9 +91,9 @@ func float64Ptr(value float64) *float64 {
 	return &value
 }
 
-func TestServiceDispatchesAuthFileIdentityByProviderBeforeType(t *testing.T) {
+func TestServiceDispatchesCredentialIdentityByProviderBeforeType(t *testing.T) {
 	db := openQuotaTestDB(t)
-	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeAuthFile, Identity: "codex-auth", Provider: "codex", Type: "unknown", Name: "auth file"})
+	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeCredential, Identity: "codex-auth", Provider: "codex", Type: "unknown", Name: "credential"})
 	handler := &recordingProviderHandler{output: quota.ProviderOutput{Provider: "codex", Result: quota.CodexResult{Usage: &quota.CodexUsagePayload{RateLimit: &quota.CodexRateLimitInfo{PrimaryWindow: &quota.CodexUsageWindow{UsedPercent: 25, LimitWindowSeconds: 18000}}}}}}
 	service := newQuotaServiceWithRegistry(t, db, quota.NewProviderRegistry(map[string]quota.ProviderHandler{"codex": handler}))
 
@@ -104,7 +104,7 @@ func TestServiceDispatchesAuthFileIdentityByProviderBeforeType(t *testing.T) {
 	if response.ID != "codex-auth" || len(response.Quota) != 1 || response.Quota[0].Key != "rate_limit.primary_window" || response.Quota[0].UsedPercent == nil || *response.Quota[0].UsedPercent != 25 {
 		t.Fatalf("unexpected check response: %+v", response)
 	}
-	if len(handler.inputs) != 1 || handler.inputs[0].Identity.Identity != "codex-auth" || handler.inputs[0].Identity.AuthType != entities.UsageIdentityAuthTypeAuthFile {
+	if len(handler.inputs) != 1 || handler.inputs[0].Identity.Identity != "codex-auth" || handler.inputs[0].Identity.AuthType != entities.UsageIdentityAuthTypeCredential {
 		t.Fatalf("unexpected provider inputs: %+v", handler.inputs)
 	}
 }
@@ -127,7 +127,7 @@ func TestServiceResolvesSubscription(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			db := openQuotaTestDB(t)
-			identity := entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeAuthFile, Identity: tc.provider + "-auth", Provider: tc.provider, Type: tc.provider, Name: "auth file"}
+			identity := entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeCredential, Identity: tc.provider + "-auth", Provider: tc.provider, Type: tc.provider, Name: "credential"}
 			if tc.identityPlan != "" {
 				identity.PlanType = &tc.identityPlan
 			}
@@ -153,7 +153,7 @@ func TestServiceResolvesSubscription(t *testing.T) {
 
 func TestServiceFallsBackToTypeWhenProviderMissing(t *testing.T) {
 	db := openQuotaTestDB(t)
-	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeAuthFile, Identity: "gemini-auth", Provider: "Gemini", Type: "gemini-cli", Name: "auth file"})
+	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeCredential, Identity: "gemini-auth", Provider: "Gemini", Type: "gemini-cli", Name: "credential"})
 	handler := &recordingProviderHandler{output: quota.ProviderOutput{Provider: "gemini-cli", Result: quota.GeminiCLIResult{Quota: &quota.GeminiCliQuotaPayload{Buckets: []quota.GeminiCliQuotaBucket{{ModelID: "gemini-2.5-pro_vertex", TokenType: "PROMPT", RemainingAmount: 42}}}}}}
 	service := newQuotaServiceWithRegistry(t, db, quota.NewProviderRegistry(map[string]quota.ProviderHandler{"gemini-cli": handler}))
 
@@ -171,7 +171,7 @@ func TestServiceFallsBackToTypeWhenProviderMissing(t *testing.T) {
 
 func TestServiceReturnsUnsupportedType(t *testing.T) {
 	db := openQuotaTestDB(t)
-	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeAuthFile, Identity: "unknown-auth", Type: "unknown", Name: "auth file"})
+	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeCredential, Identity: "unknown-auth", Type: "unknown", Name: "credential"})
 	service := newQuotaServiceWithRegistry(t, db, quota.NewProviderRegistry(nil))
 
 	_, err := service.Check(context.Background(), quota.CheckRequest{AuthIndex: "unknown-auth"})
@@ -182,7 +182,7 @@ func TestServiceReturnsUnsupportedType(t *testing.T) {
 
 func TestServiceAllowsCodexQuotaWithoutAccountID(t *testing.T) {
 	db := openQuotaTestDB(t)
-	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeAuthFile, Identity: "codex-auth", Type: "codex", Name: "auth file"})
+	seedUsageIdentity(t, db, entities.UsageIdentity{AuthType: entities.UsageIdentityAuthTypeCredential, Identity: "codex-auth", Type: "codex", Name: "credential"})
 	caller := &recordingManagementCaller{responses: []*apicall.Response{quotaAPIResponse(200, `{"plan_type":"plus","rate_limit":{"allowed":true,"limit_reached":false},"rate_limit_reset_credits":{"available_count":0}}`)}}
 	service := newQuotaServiceWithRegistry(t, db, quota.NewDefaultProviderRegistry(caller, quota.DefaultProviderConfigs()))
 

@@ -4,9 +4,9 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n'
-import { AuthFileCredentialsSection } from '../AuthFileCredentialsSection'
-import { createAuthFileSectionProps } from './credentialSectionFixtures'
-import type { AuthFileCredentialRow } from '../credentialViewModels'
+import { CredentialsSection } from '../CredentialsSection'
+import { createCredentialSectionProps } from './credentialSectionFixtures'
+import type { CredentialRow } from '../credentialViewModels'
 
 const row = (id: string, remainingDaysLabel: string, expiresAtLabel: string) => ({
   identity: { id, identity: id, is_deleted: false },
@@ -27,14 +27,14 @@ const row = (id: string, remainingDaysLabel: string, expiresAtLabel: string) => 
   quota: [],
   quotaLoading: false,
   displayQuotas: [],
-}) as AuthFileCredentialRow
+}) as CredentialRow
 
 const defaultRows = [
   row('auth-a', '13d', '2026-08-01 00:00:00 UTC+08:00'),
   row('auth-b', '14d', '2026-08-02 00:00:00 UTC+08:00'),
 ]
 
-const sectionProps = createAuthFileSectionProps({ total: 2 })
+const sectionProps = createCredentialSectionProps({ total: 2 })
 
 let container: HTMLDivElement
 let root: Root
@@ -53,11 +53,11 @@ afterEach(async () => {
   await i18n.changeLanguage('en')
 })
 
-describe('AuthFileCredentialsSection expiry tooltip', () => {
+describe('CredentialsSection expiry tooltip', () => {
   it('keeps one live, single-line tooltip positioned within a mobile viewport', async () => {
     vi.stubGlobal('innerWidth', 320)
-    const renderRows = async (rows: AuthFileCredentialRow[]) => {
-      await act(async () => root.render(<AuthFileCredentialsSection {...sectionProps} rows={rows} />))
+    const renderRows = async (rows: CredentialRow[]) => {
+      await act(async () => root.render(<CredentialsSection {...sectionProps} rows={rows} />))
     }
     await renderRows(defaultRows)
     const firstBadge = container.querySelector('[aria-label^="13d;"]') as HTMLSpanElement

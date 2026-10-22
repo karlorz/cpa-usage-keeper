@@ -451,7 +451,7 @@ func mapRealtimeCurrentUsage(current repodto.RealtimeCurrentUsageRecord) service
 	return servicedto.RealtimeCurrentUsage{
 		Models:      mapRealtimeUsageTopItems(current.Models),
 		APIKeys:     mapRealtimeUsageTopItems(current.APIKeys),
-		AuthFiles:   mapRealtimeUsageTopItems(current.AuthFiles),
+		Credentials: mapRealtimeUsageTopItems(current.Credentials),
 		AIProviders: mapRealtimeUsageTopItems(current.AIProviders),
 	}
 }
@@ -576,9 +576,9 @@ func mapAnalysisRecord(record *repodto.AnalysisRecord) *servicedto.AnalysisSnaps
 	for _, item := range record.ModelComposition {
 		models = append(models, mapAnalysisCompositionRecord(item))
 	}
-	authFiles := make([]servicedto.AnalysisCompositionItem, 0, len(record.AuthFilesComposition))
-	for _, item := range record.AuthFilesComposition {
-		authFiles = append(authFiles, mapAnalysisCompositionRecord(item))
+	credentials := make([]servicedto.AnalysisCompositionItem, 0, len(record.CredentialsComposition))
+	for _, item := range record.CredentialsComposition {
+		credentials = append(credentials, mapAnalysisCompositionRecord(item))
 	}
 	aiProviders := make([]servicedto.AnalysisCompositionItem, 0, len(record.AIProviderComposition))
 	for _, item := range record.AIProviderComposition {
@@ -619,17 +619,17 @@ func mapAnalysisRecord(record *repodto.AnalysisRecord) *servicedto.AnalysisSnaps
 		})
 	}
 	return &servicedto.AnalysisSnapshot{
-		Granularity:           servicedto.AnalysisGranularity(record.Granularity),
-		RangeStart:            record.RangeStart,
-		RangeEnd:              record.RangeEnd,
-		TokenUsage:            tokenUsage,
-		ModelUsage:            modelUsage,
-		ModelSpeed:            mapAnalysisModelSpeed(record.ModelSpeed),
-		APIKeyComposition:     apiKeys,
-		ModelComposition:      models,
-		AuthFilesComposition:  authFiles,
-		AIProviderComposition: aiProviders,
-		Heatmap:               heatmap,
+		Granularity:            servicedto.AnalysisGranularity(record.Granularity),
+		RangeStart:             record.RangeStart,
+		RangeEnd:               record.RangeEnd,
+		TokenUsage:             tokenUsage,
+		ModelUsage:             modelUsage,
+		ModelSpeed:             mapAnalysisModelSpeed(record.ModelSpeed),
+		APIKeyComposition:      apiKeys,
+		ModelComposition:       models,
+		CredentialsComposition: credentials,
+		AIProviderComposition:  aiProviders,
+		Heatmap:                heatmap,
 		CostSummary: servicedto.AnalysisCostSummary{
 			TotalCostUSD:  record.CostSummary.TotalCostUSD,
 			CostAvailable: record.CostSummary.CostAvailable,

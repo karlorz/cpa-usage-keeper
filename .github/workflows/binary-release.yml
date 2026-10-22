@@ -17,7 +17,7 @@ jobs:
 
   binary-release-linux:
     needs: release-policy
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -234,7 +234,7 @@ jobs:
           if-no-files-found: error
 
   publish-release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs:
       - release-policy
       - binary-release-linux
@@ -242,7 +242,7 @@ jobs:
       - binary-release-windows
     steps:
       - name: Download binary package artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: cpa-usage-keeper-${{ github.ref_name }}-*
           path: dist
@@ -278,11 +278,11 @@ jobs:
   update-homebrew-tap:
     # karlorz fork patch: the tap and download URLs belong to Willxup; forks skip it.
     if: github.repository == 'Willxup/cpa-usage-keeper'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: [release-policy, publish-release]
     steps:
       - name: Download binary package artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: cpa-usage-keeper-${{ github.ref_name }}-*
           path: dist

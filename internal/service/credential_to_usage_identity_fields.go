@@ -4,10 +4,10 @@ import (
 	"strings"
 	"time"
 
-	"cpa-usage-keeper/internal/cpa/dto/authfiles"
+	"cpa-usage-keeper/internal/cpa/dto/credentials"
 )
 
-func resolveAuthFileProjectID(file authfiles.AuthFile) *string {
+func resolveCredentialProjectID(file credentials.Credential) *string {
 	switch strings.ToLower(strings.TrimSpace(file.Type)) {
 	case "gemini", "gemini-cli", "gemini-cli-code-assist", "antigravity":
 		return resolveGeminiCLIProjectID(file)
@@ -16,7 +16,7 @@ func resolveAuthFileProjectID(file authfiles.AuthFile) *string {
 	}
 }
 
-func resolveCodexAccountID(file authfiles.AuthFile) *string {
+func resolveCodexAccountID(file credentials.Credential) *string {
 	var idTokenAccountID *string
 	var idTokenAccountIDCamel *string
 	if file.IDToken != nil {
@@ -29,7 +29,7 @@ func resolveCodexAccountID(file authfiles.AuthFile) *string {
 	)
 }
 
-func resolveCodexPlanType(file authfiles.AuthFile) *string {
+func resolveCodexPlanType(file credentials.Credential) *string {
 	var idTokenPlanType *string
 	var idTokenPlanTypeCamel *string
 	if file.IDToken != nil {
@@ -42,26 +42,26 @@ func resolveCodexPlanType(file authfiles.AuthFile) *string {
 	)
 }
 
-func resolveXAIUserID(file authfiles.AuthFile) *string {
-	var metadata authfiles.AuthFileClaims
+func resolveXAIUserID(file credentials.Credential) *string {
+	var metadata credentials.CredentialClaims
 	if file.Metadata != nil {
 		metadata = *file.Metadata
 	}
-	var attributes authfiles.AuthFileClaims
+	var attributes credentials.CredentialClaims
 	if file.Attributes != nil {
 		attributes = *file.Attributes
 	}
 	oauth := file.ResolvedXAIOAuth()
 	user := file.ResolvedXAIUser()
 
-	var oauthSub *authfiles.AuthFileXAIUserIDValue
-	var oauthSubject *authfiles.AuthFileXAIUserIDValue
+	var oauthSub *credentials.CredentialXAIUserIDValue
+	var oauthSubject *credentials.CredentialXAIUserIDValue
 	if oauth != nil {
 		oauthSub = oauth.Sub
 		oauthSubject = oauth.Subject
 	}
-	var userSub *authfiles.AuthFileXAIUserIDValue
-	var userID *authfiles.AuthFileXAIUserIDValue
+	var userSub *credentials.CredentialXAIUserIDValue
+	var userID *credentials.CredentialXAIUserIDValue
 	if user != nil {
 		userSub = user.Sub
 		userID = user.ID
@@ -87,7 +87,7 @@ func resolveXAIUserID(file authfiles.AuthFile) *string {
 	)
 }
 
-func resolveCodexActiveStart(file authfiles.AuthFile) *time.Time {
+func resolveCodexActiveStart(file credentials.Credential) *time.Time {
 	if file.IDToken == nil {
 		return nil
 	}
@@ -97,7 +97,7 @@ func resolveCodexActiveStart(file authfiles.AuthFile) *time.Time {
 	return file.IDToken.ActiveStartCamel
 }
 
-func resolveCodexActiveUntil(file authfiles.AuthFile) *time.Time {
+func resolveCodexActiveUntil(file credentials.Credential) *time.Time {
 	if file.IDToken == nil {
 		return nil
 	}
@@ -107,7 +107,7 @@ func resolveCodexActiveUntil(file authfiles.AuthFile) *time.Time {
 	return file.IDToken.ActiveUntilCamel
 }
 
-func resolveGeminiCLIProjectID(file authfiles.AuthFile) *string {
+func resolveGeminiCLIProjectID(file credentials.Credential) *string {
 	return stringValue(file.ProjectID)
 }
 
@@ -125,7 +125,7 @@ func firstNonEmptyStringPtr(values ...*string) *string {
 	return nil
 }
 
-func firstNonEmptyXAIUserIDValue(values ...*authfiles.AuthFileXAIUserIDValue) *string {
+func firstNonEmptyXAIUserIDValue(values ...*credentials.CredentialXAIUserIDValue) *string {
 	for _, value := range values {
 		if value == nil {
 			continue

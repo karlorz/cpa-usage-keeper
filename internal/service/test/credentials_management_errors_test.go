@@ -9,11 +9,11 @@ import (
 	_ "unsafe"
 )
 
-func TestJoinAuthFilesManagementErrorDedupesContextCancellation(t *testing.T) {
+func TestJoinCredentialsManagementErrorDedupesContextCancellation(t *testing.T) {
 	var joined error
 
-	joined = joinAuthFilesManagementError(joined, context.Canceled)
-	joined = joinAuthFilesManagementError(joined, context.Canceled)
+	joined = joinCredentialsManagementError(joined, context.Canceled)
+	joined = joinCredentialsManagementError(joined, context.Canceled)
 
 	if !errors.Is(joined, context.Canceled) {
 		t.Fatalf("expected joined error to contain context cancellation, got %v", joined)
@@ -23,15 +23,15 @@ func TestJoinAuthFilesManagementErrorDedupesContextCancellation(t *testing.T) {
 	}
 }
 
-func TestJoinAuthFilesManagementErrorReturnsFirstErrorDirectly(t *testing.T) {
+func TestJoinCredentialsManagementErrorReturnsFirstErrorDirectly(t *testing.T) {
 	first := errors.New("first failure")
 
-	if joined := joinAuthFilesManagementError(nil, first); joined != first {
+	if joined := joinCredentialsManagementError(nil, first); joined != first {
 		t.Fatalf("expected first error to be returned directly, got %T %[1]v", joined)
 	}
 }
 
 // 直接保留错误链去重与 error 对象身份的白盒覆盖。
 //
-//go:linkname joinAuthFilesManagementError cpa-usage-keeper/internal/service.joinAuthFilesManagementError
-func joinAuthFilesManagementError(joined error, err error) error
+//go:linkname joinCredentialsManagementError cpa-usage-keeper/internal/service.joinCredentialsManagementError
+func joinCredentialsManagementError(joined error, err error) error

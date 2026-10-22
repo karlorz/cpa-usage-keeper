@@ -1,9 +1,9 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { AuthFileCredentialsSection } from '../AuthFileCredentialsSection'
-import { createAuthFileSectionProps } from './credentialSectionFixtures'
-import type { AuthFileCredentialRow } from '../credentialViewModels'
+import { CredentialsSection } from '../CredentialsSection'
+import { createCredentialSectionProps } from './credentialSectionFixtures'
+import type { CredentialRow } from '../credentialViewModels'
 
 vi.mock('react-i18next', () => ({
   initReactI18next: { type: '3rdParty', init: () => undefined },
@@ -12,9 +12,9 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-const createRow = (overrides: Partial<AuthFileCredentialRow['identity']> = {}): AuthFileCredentialRow => ({
+const createRow = (overrides: Partial<CredentialRow['identity']> = {}): CredentialRow => ({
   identity: { id: '1', identity: 'auth-1', type: 'codex', is_deleted: false, ...overrides },
-  displayName: 'Auth File Row',
+  displayName: 'Credential Row',
   maskedIdentity: 'auth-1',
   providerLabel: 'Codex',
   typeLabel: 'codex',
@@ -30,12 +30,12 @@ const createRow = (overrides: Partial<AuthFileCredentialRow['identity']> = {}): 
   quota: [],
   quotaLoading: false,
   displayQuotas: [],
-} as AuthFileCredentialRow)
+} as CredentialRow)
 
-const renderSection = (rows: AuthFileCredentialRow[]) =>
-  renderToStaticMarkup(createElement(AuthFileCredentialsSection, createAuthFileSectionProps({ rows, total: rows.length })))
+const renderSection = (rows: CredentialRow[]) =>
+  renderToStaticMarkup(createElement(CredentialsSection, createCredentialSectionProps({ rows, total: rows.length })))
 
-describe('AuthFileCredentialsSection status toggle gating', () => {
+describe('CredentialsSection status toggle gating', () => {
   it('renders the enable/disable toggle for credential types Keeper knows', () => {
     const html = renderSection([createRow({ type: 'codex' })])
 
@@ -43,8 +43,8 @@ describe('AuthFileCredentialsSection status toggle gating', () => {
     expect(html).toContain('aria-pressed="true"')
   })
 
-  it('omits the toggle for unknown auth file types instead of rendering an invisible button', () => {
-    // 认证文件 type 直接来自 CPA，插件可以注册任意 provider 标识；没有品牌图标的类型不能给出开关。
+  it('omits the toggle for unknown credential types instead of rendering an invisible button', () => {
+    // 凭证 type 直接来自 CPA，插件可以注册任意 provider 标识；没有品牌图标的类型不能给出开关。
     const html = renderSection([createRow({ type: 'iflow' })])
 
     expect(html).not.toContain('data-credential-status-toggle="true"')
@@ -54,7 +54,7 @@ describe('AuthFileCredentialsSection status toggle gating', () => {
   })
 
   it('gates the toggle by brand icon mapping rather than by the single-credential whitelist', () => {
-    // kimi、antigravity、gemini-cli、openai 都是 CPA 认证文件里的真实类型：有品牌图标，但不在整条停用的白名单里。
+    // kimi、antigravity、gemini-cli、openai 都是 CPA 凭证里的真实类型：有品牌图标，但不在整条停用的白名单里。
     // 只有这些类型能把「按品牌图标判定」与「按白名单判定」两种实现区分开。
     for (const type of ['kimi', 'antigravity', 'gemini-cli', 'openai']) {
       expect(renderSection([createRow({ type })])).toContain('data-credential-status-toggle="true"')

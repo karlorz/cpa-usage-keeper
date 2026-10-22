@@ -16,7 +16,7 @@ import (
 func newUsageOverviewComparisons(filter dto.UsageQueryFilter, byDay bool) *dto.UsageOverviewComparisonsRecord {
 	result := &dto.UsageOverviewComparisonsRecord{
 		Models: map[string]*dto.UsageComparisonItemRecord{}, APIKeys: map[string]*dto.UsageComparisonItemRecord{},
-		AuthFiles: map[string]*dto.UsageComparisonItemRecord{}, AIProviders: map[string]*dto.UsageComparisonItemRecord{},
+		Credentials: map[string]*dto.UsageComparisonItemRecord{}, AIProviders: map[string]*dto.UsageComparisonItemRecord{},
 		Buckets: usageOverviewComparisonBuckets(filter, byDay), Granularity: "hourly",
 	}
 	if byDay {
@@ -77,9 +77,9 @@ func applyUsageOverviewComparison(comparisons *dto.UsageOverviewComparisonsRecor
 }
 
 func applyUsageOverviewIdentityComparison(comparisons *dto.UsageOverviewComparisonsRecord, identityLookup analysisIdentityLookup, authIndex string, row dto.UsageComparisonItemRecord) {
-	if identity, ok := identityLookup.find(entities.UsageIdentityAuthTypeAuthFile, strings.TrimSpace(authIndex)); ok {
+	if identity, ok := identityLookup.find(entities.UsageIdentityAuthTypeCredential, strings.TrimSpace(authIndex)); ok {
 		row.Label = identity.label
-		addUsageOverviewComparison(comparisons.AuthFiles, identity.identity, row)
+		addUsageOverviewComparison(comparisons.Credentials, identity.identity, row)
 	}
 	if identity, ok := identityLookup.find(entities.UsageIdentityAuthTypeAIProvider, strings.TrimSpace(authIndex)); ok {
 		row.Label = identity.label

@@ -156,7 +156,7 @@ type RealtimeUsageTopItem struct {
 type RealtimeCurrentUsage struct {
 	Models      []RealtimeUsageTopItem
 	APIKeys     []RealtimeUsageTopItem
-	AuthFiles   []RealtimeUsageTopItem
+	Credentials []RealtimeUsageTopItem
 	AIProviders []RealtimeUsageTopItem
 }
 
