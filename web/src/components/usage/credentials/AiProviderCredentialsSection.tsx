@@ -6,7 +6,7 @@ import type { UsageIdentityPageSort } from '@/lib/api'
 import { CredentialAliasEditor } from './CredentialAliasEditor'
 import { CredentialHealthPanel } from './CredentialHealthPanel'
 import { CredentialRowShell, CredentialSectionShell, CredentialTableHeader, CredentialsPagination, MetricPill, RequestMetric, TonePercent, cacheReadRateTone, formatCredentialNumber, successRateTone } from './CredentialSectionShell'
-import { PoeQuotaPanel } from './AuthFileCredentialsSection'
+import { PoeQuotaPanel } from './CredentialsSection'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { IconRefreshCw } from '@/components/ui/icons'
 import { CredentialPriorityEditor } from './CredentialPriorityEditor'
@@ -48,7 +48,7 @@ export function AiProviderCredentialsSection({ rows, total, page, totalPages, pa
       subtitle={t('usage_stats.credentials_ai_providers_subtitle')}
       countLabel={t('usage_stats.credentials_count', { count: total })}
       titleExtra={(
-        <div className={styles.credentialAuthFileTitleControls}>
+        <div className={styles.credentialsTitleControls}>
           <label className={styles.credentialActiveOnlySwitch}>
             <span className={styles.credentialActiveOnlyLabel}>{t('usage_stats.credentials_ai_providers_active_only')}</span>
             <input ref={editFallbackRef} type="checkbox" checked={activeOnly} onChange={(event) => onActiveOnlyChange(event.target.checked)} />

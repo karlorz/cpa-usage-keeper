@@ -3,9 +3,9 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthFileCredentialsSection } from '../AuthFileCredentialsSection'
-import { createAuthFileSectionProps } from './credentialSectionFixtures'
-import type { AuthFileCredentialRow } from '../credentialViewModels'
+import { CredentialsSection } from '../CredentialsSection'
+import { createCredentialSectionProps } from './credentialSectionFixtures'
+import type { CredentialRow } from '../credentialViewModels'
 
 const fileName = 'claude-account-with-a-very-long-workspace-and-profile-name.json'
 
@@ -31,9 +31,9 @@ const row = {
   quota: [],
   quotaLoading: false,
   displayQuotas: [],
-} as AuthFileCredentialRow
+} as CredentialRow
 
-const sectionProps = createAuthFileSectionProps({ rows: [row], total: 1, onEdit: async () => undefined })
+const sectionProps = createCredentialSectionProps({ rows: [row], total: 1, onEdit: async () => undefined })
 
 let container: HTMLDivElement
 let root: Root
@@ -50,11 +50,11 @@ afterEach(async () => {
   container.remove()
 })
 
-describe('AuthFileCredentialsSection filename interaction', () => {
+describe('CredentialsSection filename interaction', () => {
   it('opens details from the name without exposing the filename in a tooltip', async () => {
     const onOpenDetails = vi.fn()
     await act(async () => root.render(
-      <AuthFileCredentialsSection
+      <CredentialsSection
         {...sectionProps}
         onOpenDetails={onOpenDetails}
       />,
@@ -62,7 +62,7 @@ describe('AuthFileCredentialsSection filename interaction', () => {
 
     const name = container.querySelector('[data-credential-detail-trigger="true"]') as HTMLButtonElement
     expect(name.textContent).toContain('same@example.com')
-    expect(name.getAttribute('data-auth-file-name-tooltip-target')).toBeNull()
+    expect(name.getAttribute('data-credential-name-tooltip-target')).toBeNull()
     expect(name.getAttribute('aria-label')).toBeNull()
     expect(container.textContent).not.toContain(fileName)
 

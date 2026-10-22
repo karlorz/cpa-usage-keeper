@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"cpa-usage-keeper/internal/cpa/dto/authfiles"
+	"cpa-usage-keeper/internal/cpa/dto/credentials"
 )
 
-func TestAuthFilePreservesXAIUserIDCandidates(t *testing.T) {
+func TestCredentialPreservesXAIUserIDCandidates(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -39,26 +39,26 @@ func TestAuthFilePreservesXAIUserIDCandidates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var file authfiles.AuthFile
+			var file credentials.Credential
 			if err := json.Unmarshal([]byte(tt.input), &file); err != nil {
-				t.Fatalf("unmarshal AuthFile: %v", err)
+				t.Fatalf("unmarshal Credential: %v", err)
 			}
 			encoded, err := json.Marshal(file)
 			if err != nil {
-				t.Fatalf("marshal AuthFile: %v", err)
+				t.Fatalf("marshal Credential: %v", err)
 			}
 			var roundTrip map[string]any
 			if err := json.Unmarshal(encoded, &roundTrip); err != nil {
-				t.Fatalf("unmarshal round-trip AuthFile: %v", err)
+				t.Fatalf("unmarshal round-trip Credential: %v", err)
 			}
 			if got := nestedString(roundTrip, tt.path...); got != tt.want {
-				t.Fatalf("expected %v to survive AuthFile decoding, got %q from %s", tt.path, got, encoded)
+				t.Fatalf("expected %v to survive Credential decoding, got %q from %s", tt.path, got, encoded)
 			}
 		})
 	}
 }
 
-func TestAuthFileIgnoresNonObjectXAIContainers(t *testing.T) {
+func TestCredentialIgnoresNonObjectXAIContainers(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -71,21 +71,21 @@ func TestAuthFileIgnoresNonObjectXAIContainers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var file authfiles.AuthFile
+			var file credentials.Credential
 			if err := json.Unmarshal([]byte(tt.input), &file); err != nil {
-				t.Fatalf("non-object xAI container must not fail AuthFile decoding: %v", err)
+				t.Fatalf("non-object xAI container must not fail Credential decoding: %v", err)
 			}
 			if file.AuthIndex != "auth-1" {
-				t.Fatalf("expected ordinary AuthFile fields to keep decoding, got %+v", file)
+				t.Fatalf("expected ordinary Credential fields to keep decoding, got %+v", file)
 			}
 		})
 	}
 }
 
-func TestAuthFileXAIClaimsUseExactJSONKeys(t *testing.T) {
-	var file authfiles.AuthFile
+func TestCredentialXAIClaimsUseExactJSONKeys(t *testing.T) {
+	var file credentials.Credential
 	if err := json.Unmarshal([]byte(`{"SUB":"wrong-account","subject":"correct-account"}`), &file); err != nil {
-		t.Fatalf("unmarshal AuthFile: %v", err)
+		t.Fatalf("unmarshal Credential: %v", err)
 	}
 	if file.Sub != nil {
 		t.Fatalf("expected uppercase SUB to be ignored, got %q", string(*file.Sub))
@@ -95,7 +95,7 @@ func TestAuthFileXAIClaimsUseExactJSONKeys(t *testing.T) {
 	}
 }
 
-func TestAuthFileFormatsNumericXAIUserIDLikeJavaScript(t *testing.T) {
+func TestCredentialFormatsNumericXAIUserIDLikeJavaScript(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -109,9 +109,9 @@ func TestAuthFileFormatsNumericXAIUserIDLikeJavaScript(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var file authfiles.AuthFile
+			var file credentials.Credential
 			if err := json.Unmarshal([]byte(tt.input), &file); err != nil {
-				t.Fatalf("unmarshal AuthFile: %v", err)
+				t.Fatalf("unmarshal Credential: %v", err)
 			}
 			if file.Sub == nil || string(*file.Sub) != tt.want {
 				t.Fatalf("expected JavaScript number string %q, got %+v", tt.want, file.Sub)

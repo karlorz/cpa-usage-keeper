@@ -62,7 +62,7 @@ func scanUsageOverviewComparisonTokenSeries(query *gorm.DB, dimension string, by
 				kind  entities.UsageIdentityAuthType
 				items map[string]*dto.UsageComparisonItemRecord
 			}{
-				{entities.UsageIdentityAuthTypeAuthFile, comparisons.AuthFiles},
+				{entities.UsageIdentityAuthTypeCredential, comparisons.Credentials},
 				{entities.UsageIdentityAuthTypeAIProvider, comparisons.AIProviders},
 			} {
 				if identity, ok := identities.find(target.kind, strings.TrimSpace(key.String)); ok {
