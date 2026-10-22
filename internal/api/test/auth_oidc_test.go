@@ -394,6 +394,59 @@ func TestOIDCAPISuccessResetsOriginalLoginSourceAfterCallbackIPChanges(t *testin
 	}
 }
 
+func TestOIDCSurfaceInertWhenUnconfigured(t *testing.T) {
+	cases := []struct {
+		name   string
+		config keeperapi.AuthConfig
+	}{
+		{name: "auth-disabled-zero-config", config: keeperapi.AuthConfig{}},
+		{name: "password-auth-without-oidc", config: keeperapi.AuthConfig{Enabled: true, LoginPassword: "password", SessionTTL: time.Hour}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sessions := auth.NewSessionManager(time.Hour)
+			handler := keeperapi.NewAuthHandler(tc.config, sessions)
+			router := keeperapi.NewRouter(nil, nil, nil, nil, tc.config, handler, "")
+
+			sessionResp := httptest.NewRecorder()
+			sessionReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/session", nil)
+			router.ServeHTTP(sessionResp, sessionReq)
+			if sessionResp.Code != http.StatusOK {
+				t.Fatalf("session status = %d body=%s", sessionResp.Code, sessionResp.Body.String())
+			}
+			var session struct {
+				OIDCLoginEnabled bool `json:"oidc_login_enabled"`
+			}
+			if err := json.Unmarshal(sessionResp.Body.Bytes(), &session); err != nil {
+				t.Fatal(err)
+			}
+			if session.OIDCLoginEnabled {
+				t.Fatalf("OIDC login path enabled without OIDC config: %s", sessionResp.Body.String())
+			}
+
+			loginResp := httptest.NewRecorder()
+			loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/oidc/login", strings.NewReader(`{}`))
+			loginReq.Header.Set("Content-Type", "application/json")
+			loginReq.Header.Set(requestIntentHeaderName, requestIntentHeaderValueFetch)
+			loginReq.RemoteAddr = "192.0.2.2:1234"
+			router.ServeHTTP(loginResp, loginReq)
+			if loginResp.Code != http.StatusForbidden || !strings.Contains(loginResp.Body.String(), "OIDC login is unavailable") {
+				t.Fatalf("unconfigured OIDC login = %d %s", loginResp.Code, loginResp.Body.String())
+			}
+
+			callbackResp := httptest.NewRecorder()
+			callbackReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/oidc/callback?code=unconfigured&state=unconfigured", nil)
+			router.ServeHTTP(callbackResp, callbackReq)
+			if callbackResp.Code != http.StatusSeeOther {
+				t.Fatalf("unconfigured OIDC callback = %d %s", callbackResp.Code, callbackResp.Body.String())
+			}
+			if location := callbackResp.Header().Get("Location"); !strings.Contains(location, "oidc_error=") {
+				t.Fatalf("callback did not reject: Location=%s", location)
+			}
+		})
+	}
+}
+
 func TestOIDCAPIProviderErrorAndUnknownStatePreserveExistingSessions(t *testing.T) {
 	e := newOIDCAPIEnvironment(t, "", "http")
 	token, _, err := e.sessions.Create()
