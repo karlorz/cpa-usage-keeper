@@ -3,15 +3,16 @@ import { useTranslation } from 'react-i18next'
 import styles from './CredentialSections.module.scss'
 import { formatCredentialTimestamp, type AiProviderCredentialRow } from './credentialViewModels'
 import type { UsageIdentityPageSort } from '@/lib/api'
-import { CredentialAliasEditor } from './CredentialAliasEditor'
+import { CredentialAliasEditor, CredentialEditButton } from './CredentialAliasEditor'
 import { CredentialHealthPanel } from './CredentialHealthPanel'
-import { CredentialRowShell, CredentialSectionShell, CredentialTableHeader, CredentialsPagination, MetricPill, RequestMetric, TonePercent, cacheReadRateTone, formatCredentialNumber, successRateTone } from './CredentialSectionShell'
+import { CredentialCardGrid, CredentialCardShell, CredentialSectionShell, CredentialsPagination, MetricPill, RequestMetric, TonePercent, cacheReadRateTone, formatCredentialNumber, successRateTone } from './CredentialSectionShell'
 import { PoeQuotaPanel } from './CredentialsSection'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { IconRefreshCw } from '@/components/ui/icons'
 import { CredentialPriorityEditor } from './CredentialPriorityEditor'
 import { CredentialStatusToggle, CredentialStatusUnsupportedIcon, isCredentialStatusToggleSupported } from './CredentialStatusToggle'
 import { QuestionMarkHelp } from '@/components/ui/QuestionMarkHelp'
+import { ProviderBrandIcon } from '@/components/ProviderBrandIcon'
 
 interface AiProviderCredentialsSectionProps {
   rows: AiProviderCredentialRow[]
@@ -73,22 +74,16 @@ export function AiProviderCredentialsSection({ rows, total, page, totalPages, pa
     >
       {loading && rows.length === 0 && <div className={styles.credentialEmptyState}>{t('common.loading')}</div>}
       {!loading && rows.length === 0 && <div className={styles.credentialEmptyState}>{t('usage_stats.credentials_ai_providers_empty')}</div>}
-      {rows.length > 0 && (
-        <CredentialTableHeader
-          rowClassName={styles.aiProviderCredentialRow}
-          nameLabel={t('usage_stats.credentials_column_name')}
-          totalRequestsLabel={t('usage_stats.total_requests')}
-          successRateLabel={t('usage_stats.success_rate')}
-          totalTokensLabel={t('usage_stats.total_tokens')}
-          cacheReadRateLabel={t('usage_stats.cache_rate')}
-          sideLabel={t('usage_stats.credentials_column_health')}
-        />
-      )}
-      {rows.map((row) => (
-        <CredentialRowShell
+      <CredentialCardGrid>
+      {rows.map((row) => {
+        const openDetails = onOpenDetails ? () => onOpenDetails(row) : undefined
+        return <CredentialCardShell
           key={row.identity.id || row.identity.identity}
-          icon={isCredentialStatusToggleSupported(row.identity.type) ? (
+          identityId={row.identity.id || row.identity.identity}
+          icon={<ProviderBrandIcon providerType={row.identity.type} size={30} />}
+          status={isCredentialStatusToggleSupported(row.identity.type) ? (
             <CredentialStatusToggle
+              variant="switch"
               providerType={row.identity.type}
               displayName={row.displayName}
               disabled={row.identity.disabled}
@@ -97,30 +92,19 @@ export function AiProviderCredentialsSection({ rows, total, page, totalPages, pa
               onToggle={(disabled) => onToggleStatus?.(row.identity.id || row.identity.identity, row.identity.identity, disabled)}
             />
           ) : (
-            // OpenAI 兼容类供应商没有对应的整条停用语义，静态图标复用同一套行内提示。
-            <CredentialStatusUnsupportedIcon displayName={row.displayName} providerType={row.identity.type} />
+            // OpenAI 兼容类型的静态说明与展示性品牌图标分开，不提供可执行开关。
+            <CredentialStatusUnsupportedIcon variant="info" displayName={row.displayName} providerType={row.identity.type} />
           )}
-          title={onEdit ? (
+          title={(
             <CredentialAliasEditor
               identityId={row.identity.id}
               displayName={row.displayName}
-
+              showEditButton={false}
               disabled={row.identity.is_deleted}
-              onOpenDetails={onOpenDetails ? () => onOpenDetails(row) : undefined}
-              onEdit={() => onEdit(row)}
+              onOpenDetails={openDetails}
             />
-          ) : onOpenDetails ? (
-            <button
-              type="button"
-              className={styles.credentialDetailNameButton}
-            data-credential-detail-trigger="true"
-            onClick={() => onOpenDetails(row)}
-          >
-              <span className={styles.credentialDetailNameText}>{row.displayName}</span>
-              <span className={styles.credentialDetailNameArrow} aria-hidden="true">‹</span>
-            </button>
-          ) : row.displayName}
-          subtitle={row.priorityLabel || (onSavePriority && !row.identity.is_deleted) ? (
+          )}
+          badges={row.priorityLabel || (onSavePriority && !row.identity.is_deleted) ? (
             <span className={styles.credentialIdentityBadges}>
               <CredentialPriorityEditor
                 priority={row.identity.priority}
@@ -131,38 +115,38 @@ export function AiProviderCredentialsSection({ rows, total, page, totalPages, pa
               />
             </span>
           ) : undefined}
-          badges={null}
           metricsTitle={row.identity.stats_reset_at ? t('usage_stats.credentials_stats_since', { time: formatCredentialTimestamp(row.identity.stats_reset_at) ?? row.identity.stats_reset_at }) : undefined}
           metrics={(
             <>
-              <MetricPill value={<RequestMetric total={row.totalRequests} success={row.successCount} failure={row.failureCount} />} />
-              <MetricPill value={<TonePercent value={row.successRate} tone={successRateTone(row.successRate)} />} />
-              <MetricPill value={formatCredentialNumber(row.totalTokens)} />
-              <MetricPill value={<TonePercent value={row.cacheReadRate} tone={cacheReadRateTone(row.cacheReadRate)} />} />
+              <MetricPill label={t('usage_stats.credentials_metric_requests')} value={<RequestMetric total={row.totalRequests} success={row.successCount} failure={row.failureCount} />} />
+              <MetricPill label={t('usage_stats.credentials_metric_success')} value={<TonePercent value={row.successRate} tone={successRateTone(row.successRate)} />} />
+              <MetricPill label={t('usage_stats.credentials_metric_tokens')} value={formatCredentialNumber(row.totalTokens)} />
+              <MetricPill label={t('usage_stats.credentials_metric_cache')} value={<TonePercent value={row.cacheReadRate} tone={cacheReadRateTone(row.cacheReadRate)} />} />
             </>
           )}
-          side={row.hasPoeQuota ? (
-            <div className={styles.credentialQuotaSideWithAction}>
-              <PoeQuotaPanel row={row} />
-              <div className={styles.credentialQuotaActionStack}>
+          health={<CredentialHealthPanel variant="compact" showCompactMeta displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.lastUsedText} windowCacheReadRate={row.windowCacheReadRate} />}
+          quota={row.hasPoeQuota ? <PoeQuotaPanel row={row} /> : undefined}
+          actions={(
+            <>
+              {onEdit && <CredentialEditButton identityId={row.identity.id} disabled={row.identity.is_deleted} onEdit={() => onEdit(row)} />}
+              {row.hasPoeQuota && (
                 <button
                   type="button"
-                  className={`${styles.credentialRowRefreshButton} ${rowRefreshing(row) ? styles.credentialRowRefreshButtonLoading : ''}`.trim()}
+                  className={`${styles.credentialRowRefreshButton} ${styles.credentialCardActionButton} ${rowRefreshing(row) ? styles.credentialRowRefreshButtonLoading : ''}`.trim()}
                   onClick={() => onRefreshQuotaForAuthIndex ? void onRefreshQuotaForAuthIndex(row.identity.identity) : undefined}
                   disabled={row.identity.is_deleted || rowRefreshing(row) || !onRefreshQuotaForAuthIndex}
                   aria-label={t('usage_stats.credentials_refresh_single', { name: row.displayName })}
+                  title={t('usage_stats.credentials_refresh_single', { name: row.displayName })}
                   aria-busy={rowRefreshing(row)}
                 >
-                  {rowRefreshing(row) ? <LoadingSpinner size={13} /> : <IconRefreshCw size={13} />}
+                  {rowRefreshing(row) ? <LoadingSpinner size={15} /> : <IconRefreshCw size={15} />}
                 </button>
-              </div>
-            </div>
-          ) : (
-            <CredentialHealthPanel displayName={row.displayName} health={row.credentialHealth} lastUsedAt={row.lastUsedText} statsUpdatedAt={row.statsUpdatedText} windowCacheReadRate={row.windowCacheReadRate} />
+              )}
+            </>
           )}
-          rowClassName={styles.aiProviderCredentialRow}
         />
-      ))}
+      })}
+      </CredentialCardGrid>
       <CredentialsPagination
         page={page}
         total={total}
